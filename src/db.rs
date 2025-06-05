@@ -312,7 +312,7 @@ pub async fn get_unfamiliar_words(
     Ok(records)
 }
 
-
+// this function is not needed, update_familiarity will handle both insert and update
 pub async fn increment_practice_time(pool: &sqlx::SqlitePool, word_id: i64) -> Result<(), sqlx::Error> {
     // Try to update
     let result = sqlx::query("UPDATE familiarity SET practice_time = practice_time + 1 WHERE id = ?")

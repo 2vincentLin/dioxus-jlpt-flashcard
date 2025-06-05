@@ -4,8 +4,12 @@ use dioxus::prelude::*;
 use dioxus::desktop::{Config, WindowBuilder};
 mod flashcard;
 mod test;
+mod nav;
 use flashcard::FlashCard;
 use test::TextInputPanel;
+use nav::DataDisplayPage;
+use nav::FetchAndNavigateComponent;
+
 
 
 #[derive(Debug, Clone, Routable, PartialEq)]
@@ -22,12 +26,18 @@ enum Route {
     TextInputPanel {},
     #[route("/output")]
     OutputPanel {},
+    #[route("/fetch")]
+    FetchAndNavigateComponent {},
+    #[route("/data_diaplay")]
+    DataDisplayPage {},
 }
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 const HEADER_SVG: Asset = asset!("/assets/header.svg");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
+const BOOTSTRAP_CSS: Asset = asset!("/assets/bootstrap.min.css");
+
 
 fn main() {
     
@@ -37,21 +47,30 @@ fn main() {
 #[component]
 fn App() -> Element {
     let shared_text = use_signal(|| "".to_string());
+    let mut shared_data = use_signal(|| 1);
+    let mut another_shared_data = use_signal(|| 100);
 
     provide_context(shared_text.clone()); // now available to all children
+    provide_context(shared_data.clone());
+    provide_context(another_shared_data.clone());
     
-    // Configure the window (apply do desktop)
-    let css = include_str!("../assets/main.css");
-
-
+    // Include the Bootstrap and global stylesheets
+    let bootstrap = include_str!("../assets/bootstrap.min.css");
+    let global= include_str!("../assets/main.css");
     rsx! {
+
+        head {
+            style { dangerous_inner_html: bootstrap }
+            style { dangerous_inner_html: global }
+        }
+       
+   
         
         
-        // apply to desktop
-        style {"{css}"}
-
-
-        document::Stylesheet { href: MAIN_CSS }
+        // keep these for web app
+        document::Link { rel: "icon", href: FAVICON }
+        document::Link { rel: "stylesheet", href: BOOTSTRAP_CSS }
+        document::Link { rel: "stylesheet", href: MAIN_CSS }
         div {
             
             Router::<Route> {}
@@ -86,6 +105,10 @@ fn Navbar() -> Element {
             Link {
                 to: Route::OutputPanel {},
                 "Output "
+            }
+            Link {
+                to: Route::FetchAndNavigateComponent {},
+                "fetch"
             }
         }
 

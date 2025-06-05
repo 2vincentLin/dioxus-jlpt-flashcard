@@ -4,10 +4,10 @@
 ## 1. signal test
 
 1. if you have a signal variable, then all component use it will update if the value updates.
-2. if you copy singal variable to another non-signal variable, and you changed the signal variable, non-signal varialbe will be updated automatically, but slower.
+2. if you copy signal variable to another non-signal variable, and you changed the signal variable, non-signal variable will be updated automatically, but slower.
 3. if you change the non-signal variable, original signal variable won't be affected.
 4. if you clone it by calling clone(), then both will stay in sync immediately.
-5. use_resource will alway run when you load the page at 1st time. stop is using some variables.
+5. use_resource will always run when you load the page at 1st time. stop is using some variables.
 6. if you have a resource depends on multiple signal simultaneously, using tuple to wrap them 
 
 ```rust
@@ -32,8 +32,8 @@ let _ = use_resource(move || async move {
 ## 2. batch database read but without automatically reload by signal
 
 1. all the async work must be put in the use_resource.
-2. use_resource automatcially trigger if any signal value it depends changes.
-3. so if you want to use the resource but don't want the resource reload, don't toucch those singal you put it the user_resource. Except String type (2025/05/31)
+2. use_resource automatically trigger if any signal value it depends changes.
+3. so if you want to use the resource but don't want the resource reload, don't touch those signal you put it the user_resource. Except String type (2025/05/31)
 4. 
 
 ```rust
