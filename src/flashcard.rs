@@ -31,7 +31,6 @@ fn update_flashcard(
     }
 
 
-
 #[component]
 pub fn FlashCard() -> Element {
     let mut question = use_signal(|| "".to_string());
@@ -544,7 +543,7 @@ pub fn GenerateCard() -> Element {
 #[component]
 pub fn DisplayCard(j_to_e: bool) -> Element {
     let navigator = use_navigator();
-    let mut index = use_signal(|| 0 as usize);
+    let mut index = use_signal(|| 0 as usize); // current index in select_words
     let select_words = use_context::<Signal<Vec<WordRecord>>>();
     let total_cards = select_words.len();
     
@@ -554,10 +553,17 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
     let mut show_reading = use_signal(|| true);
     let mut show_answer = use_signal(|| false);
 
+    // --- content for UI ---
     let mut question = use_signal(|| "".to_string());
     let mut reading = use_signal(|| "".to_string());
     let mut answer = use_signal(|| "".to_string());
 
+
+    let db_pool = use_context::<sqlx::SqlitePool>();
+    let pool_un = db_pool.clone();
+    let pool_fa = db_pool.clone();
+
+    
 
 
     // 1. --- Refactored Logic: Create a reusable closure to load a card ---
@@ -600,45 +606,13 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
         load_card(next_index); // Load the new card using the reusable logic
     };
 
-    // 4. --- update familiar event handle
-    let update_db_familiar = move |familar: bool| async move {
-        eprintln!("update_db_familiar is called with familar: {}", familar);
-        match SqlitePoolOptions::new()
-            .max_connections(5)
-            .connect(DB_URL)
-            .await {
-                Ok(pool) => {
-                    match update_familiar(&pool,index() as i64, familar).await {
-                        Ok(_) => {
-                            eprintln!("Familiar status updated successfully");
-                        },
-                        Err(e) => {
-                            eprintln!("Familiar status updated fail: {}", e);
-                        }
-                    }
-                },
-                Err(e) => {
-                    eprintln!("Error connecting to database: {}", e);
-                    ()
-                }
-            };
-    };
-
-
-
-
-
-
-
-
-
-
+  
 
 
     rsx! {
         
 
-        div { class: "container vh-100 d-flex flex-column",
+        div { class: "container h-100 d-flex flex-column",
             // --- Top Controls ---
             div { class: "row my-3",
                 div { class: "col-auto",
@@ -667,7 +641,7 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
             // --- Main Content ---
             div { class: "row flex-grow-1 d-flex flex-column justify-content-center",
 
-                div { class: "col",
+                div { class: "col py-0" ,
                         h2 { class: "display-4",
                             if show_question() {"{question()}" } else {""}
                         }
@@ -715,17 +689,48 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
             div { class: "row my-3",
                 div { class: "col",
                     button { class: "btn btn-warning w-100", 
-                    onclick: move |_| async move {
-                        update_db_familiar(false).await;
-                        go_to_next_card();
+                    onclick: move |_| {
+                        let pool = pool_un.clone();
+                        let word_id = select_words.get(index()).unwrap().id;
+                        eprintln!("word_id: {}", word_id);
+                        
+                        // in normal rust, async move won't be executed unless you call await, or use spawn in Dioxus
+                        spawn (async move {
+                            match update_familiar(&pool, word_id, false).await {
+                                Ok(_) => {
+                                    eprintln!("id {:?} for unfamiliar updated successfully", word_id);
+                                }
+                                Err(e) => {
+                                    eprintln!("Background update failed: {}", e);
+                                },
+                            }
+
+                            go_to_next_card();
+                        });
                     }, 
                     "Need more practice" }
                 }
                 div { class: "col",
-                    button { class: "btn btn-success w-100", onclick: move |_| async move {
-                        update_db_familiar(true).await;
-                        go_to_next_card();
-                    }, 
+                    button { class: "btn btn-success w-100", 
+                    onclick: move |_| {
+                        let pool = pool_fa.clone();
+                        let word_id = select_words.get(index()).unwrap().id;
+                        eprintln!("word_id: {}", word_id);
+                        
+                        // but in Dioxus 6.0, they add new function to auto spawn
+                        async move {
+                            match update_familiar(&pool, word_id, true).await {
+                                Ok(_) => {
+                                    eprintln!("id {:?} for familiar updated successfully", word_id);
+                                }
+                                Err(e) => {
+                                    eprintln!("Background update failed: {}", e);
+                                },
+                            }
+
+                            go_to_next_card();
+                        }
+                    },
                     "Got it!" }
                 }
             }

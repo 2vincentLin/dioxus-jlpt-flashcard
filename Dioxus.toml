@@ -20,3 +20,5 @@ script = []
 # serve: [dev-server] only
 script = []
 
+# `build` & `serve` output path
+out_dir = "C:\\rust-target"

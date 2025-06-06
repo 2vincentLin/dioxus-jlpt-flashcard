@@ -1,7 +1,9 @@
-// pub mod db;
-// mod flashcard;
-// mod test;
-// mod nav;
+// get rid of console, but also remove any println!
+// #![windows_subsystem = "windows"]
+
+// This will only apply the `windows_subsystem` attribute when compiling
+// in release mode (i.e., with `cargo build --release`).
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 
 use dioxus::prelude::*;
@@ -20,6 +22,7 @@ const MAIN_CSS: Asset = asset!("/assets/main.css");
 const HEADER_SVG: Asset = asset!("/assets/header.svg");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 const BOOTSTRAP_CSS: Asset = asset!("/assets/bootstrap.min.css");
+
 
 
 fn main() {
@@ -54,11 +57,12 @@ fn App() -> Element {
     // Include the Bootstrap and global stylesheets
     let bootstrap = include_str!("../assets/bootstrap.min.css");
     let global= include_str!("../assets/main.css");
-    let header_svg = include_str!("../assets/header.svg");
+    // let header_svg = include_str!("../assets/header.svg");
 
 
     // initiate db pool for all children component
     let db_pool = use_resource(move || async move {
+        eprintln!("use_resource for db pool called");
         SqlitePoolOptions::new()
             .max_connections(5)
             // Proactively close connections that have been idle for 10 minutes.
@@ -74,6 +78,7 @@ fn App() -> Element {
     match &*db_pool.read_unchecked() {
         Some(Ok(pool)) => {
             provide_context(pool.clone());
+            // use_context_provider(|| db_pool.clone());
             eprintln!("pool is read");
             ()
         }
@@ -95,17 +100,16 @@ fn App() -> Element {
             style { dangerous_inner_html: bootstrap }
             style { dangerous_inner_html: global }
         }
-        div { 
-            dangerous_inner_html: header_svg
-        }
+
    
         
         // keep these for web app
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: BOOTSTRAP_CSS }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
-        div {
-            
+        // this is parent div, use vh-100 take 100%of viewport
+        div { class: "d-flex flex-column vh-100",
+
             Router::<Route> {}
         }
     }
