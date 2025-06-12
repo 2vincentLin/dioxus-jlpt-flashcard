@@ -204,8 +204,10 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
 
     // --- pool for db op ---
     let db_pool = use_context::<sqlx::SqlitePool>();
-    let pool_un = db_pool.clone();
-    let pool_fa = db_pool.clone();
+    let pool_un = db_pool.clone(); // pool for unfamiliar op
+    let pool_fa = db_pool.clone(); // pool for familiar op
+    let pool_um = db_pool.clone(); // pool for user mark op
+
 
     // --- voice for tts ---
     let voice = return_voice("ja", Gender::Male)?;
@@ -286,11 +288,39 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
 
             // --- Main Content ---
             div { class: "row flex-grow-1 d-flex flex-column justify-content-center",
+                // 1. Wrap the heading and button in a flex container
+                div { class: "col d-flex justify-content-between align-items-center",
+            
+                    // 2. The original h2 tag
+                    // I've added mb-0 to remove its default bottom margin for better alignment
+                    p { class: "lead my-3",
+                        if show_question() { "{question()}" } else { "" }
+                    }
 
-                div { class: "col py-0" ,
-                        h2 { class: "display-4",
-                            if show_question() {"{question()}" } else {""}
-                        }
+                    // 3. The new star button, with spacing on its left (ms-3)
+                    button { 
+                        class: "btn btn-lg btn-outline-warning ms-3", 
+                        // todo: display star based on user_mark field
+                        // Using a Unicode star character for the icon
+                        // onclick: move |_| {
+                        // let pool = pool_um.clone();
+                        // let word_id = select_words.get(index()).unwrap().id;
+                        // eprintln!("word_id: {}", word_id);
+                        
+                        // spawn (async move {
+                        //     match mark_word(&pool, word_id).await {
+                        //         Ok(_) => {
+                        //             eprintln!("id {:?} for marked successfully", word_id);
+                        //         }
+                        //         Err(e) => {
+                        //             eprintln!("Background update failed: {}", e);
+                        //         },
+                        //     }
+
+                        //     });
+                        // },
+                        "★" 
+                    }
                 }
 
                 if show_reading() {

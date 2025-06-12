@@ -2,11 +2,13 @@ pub mod db;
 pub mod flashcard;
 pub mod test;
 
+
 use tts::*;
 
 use dioxus::prelude::*;
 use test::TextInputPanel;
 use flashcard::{GenerateCard, DisplayCard};
+use db::*;
 
 
 const HEADER_SVG: Asset = asset!("/assets/header.svg");
@@ -26,6 +28,8 @@ pub enum Route {
     TextInputPanel {},
     #[route("/output")]
     OutputPanel {},
+    #[route("/setting")]
+    Setting {},
 
 }
 
@@ -112,6 +116,14 @@ pub fn Navbar() -> Element { // Encapsulating navbar in its own component is goo
                                 "Output"
                             }
                         }
+                        li { class: "nav-item",
+                            Link {
+                                class: "nav-link",
+                                to: Route::Setting {},
+                                onclick: move |_| is_nav_open.set(false), // Close nav on link click
+                                "Setting"
+                            }
+                        }
                         
                         // You can add more nav items (e.g., dropdowns) here if needed
                     }
@@ -140,6 +152,86 @@ fn Home() -> Element {
 
     }
 }
+
+
+#[component]
+fn Setting() -> Element {
+    // --- pool for db op ---
+    let db_pool = use_context::<sqlx::SqlitePool>();
+    let mut show_confirm_dialog = use_signal(|| false);
+
+
+    rsx!(
+        div { class: "container h-100 d-flex flex-column",
+            div { class: "d-flex justify-content-between align-items-center my-3",
+                h3 { class: "mb-0", "Reset your practice record" }
+
+                // 2. This button NO LONGER calls the database directly.
+                //    It now just shows the confirmation dialog.
+                button {
+                    class: "btn btn-danger", // Changed to red for a destructive action
+                    onclick: move |_| {
+                        show_confirm_dialog.set(true);
+                    },
+                    "Reset DB"
+                }
+            }
+        }
+
+        // 3. Conditionally render the modal based on the signal's value.
+        //    This part will only appear when `show_confirm_dialog` is true.
+        if show_confirm_dialog() {
+            // Modal backdrop
+            div {
+                class: "modal fade show d-block",
+                style: "background-color: rgba(0, 0, 0, 0.5);",
+
+                // Modal dialog
+                div { class: "modal-dialog modal-dialog-centered",
+                    div { class: "modal-content",
+                        // Modal header
+                        div { class: "modal-header",
+                            h5 { class: "modal-title", "Confirm Action" }
+                        }
+                        // Modal body
+                        div { class: "modal-body",
+                            p { "Are you sure you want to reset all practice data? This action cannot be undone." }
+                        }
+                        // Modal footer with action buttons
+                        div { class: "modal-footer",
+                            // The "Cancel" button simply hides the dialog
+                            button {
+                                class: "btn btn-secondary",
+                                onclick: move |_| show_confirm_dialog.set(false),
+                                "Cancel"
+                            }
+                            // The "Confirm" button closes the dialog AND runs the reset logic
+                            button {
+                                class: "btn btn-danger",
+                                onclick: move |_| {
+                                    // First, hide the dialog
+                                    show_confirm_dialog.set(false);
+
+                                    // Then, run your original database reset logic
+                                    let pool = db_pool.clone();
+                                    spawn(async move {
+                                        match reset_familiarity(&pool).await {
+                                            Ok(_) => eprintln!("database reset successfully"),
+                                            Err(e) => eprintln!("database reset failed: {}", e),
+                                        }
+                                    });
+                                },
+                                "Yes, Reset"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+
 
 
 
