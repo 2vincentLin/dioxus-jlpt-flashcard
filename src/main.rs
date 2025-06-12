@@ -19,8 +19,8 @@ use dxgui::db::DB_URL;
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const MAIN_CSS: Asset = asset!("/assets/main.css");
-const HEADER_SVG: Asset = asset!("/assets/header.svg");
-const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
+// const HEADER_SVG: Asset = asset!("/assets/header.svg");
+// const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 const BOOTSTRAP_CSS: Asset = asset!("/assets/bootstrap.min.css");
 
 
@@ -49,7 +49,7 @@ fn main() {
 fn App() -> Element {
     let shared_text = use_signal(|| "".to_string());
     // this will be used in flashcard to hold the retrieved data
-    let mut select_words = use_signal(|| Vec::<WordRecord>::new());
+    let select_words = use_signal(|| Vec::<WordRecord>::new());
 
     provide_context(shared_text.clone()); // now available to all children
     provide_context(select_words.clone());

@@ -1,12 +1,9 @@
 pub mod db;
 pub mod flashcard;
-pub mod test;
-
 
 use tts::*;
 
 use dioxus::prelude::*;
-use test::TextInputPanel;
 use flashcard::{GenerateCard, DisplayCard};
 use db::*;
 
@@ -24,10 +21,6 @@ pub enum Route {
     GenerateCard {},
     #[route("/diaplay/:j_to_e")]
     DisplayCard { j_to_e: bool},
-    #[route("/test")]
-    TextInputPanel {},
-    #[route("/output")]
-    OutputPanel {},
     #[route("/setting")]
     Setting {},
 
@@ -53,7 +46,7 @@ pub fn Navbar() -> Element { // Encapsulating navbar in its own component is goo
                 Link {
                     class: "navbar-brand", // Bootstrap class for branding
                     to: Route::Home {},
-                    "MyApp" // Your app's name or logo
+                    "Japanese Flash Card" // Your app's name or logo
                 }
 
                 // Navbar toggler button (for small screens)
@@ -98,22 +91,6 @@ pub fn Navbar() -> Element { // Encapsulating navbar in its own component is goo
                                 to: Route::GenerateCard {},
                                 onclick: move |_| is_nav_open.set(false), // Close nav on link click
                                 "Flash Card"
-                            }
-                        }
-                        li { class: "nav-item",
-                            Link {
-                                class: "nav-link",
-                                to: Route::TextInputPanel {},
-                                onclick: move |_| is_nav_open.set(false), // Close nav on link click
-                                "Test Input"
-                            }
-                        }
-                        li { class: "nav-item",
-                            Link {
-                                class: "nav-link",
-                                to: Route::OutputPanel {},
-                                onclick: move |_| is_nav_open.set(false), // Close nav on link click
-                                "Output"
                             }
                         }
                         li { class: "nav-item",
@@ -215,7 +192,7 @@ fn Setting() -> Element {
                                     // Then, run your original database reset logic
                                     let pool = db_pool.clone();
                                     spawn(async move {
-                                        match reset_familiarity(&pool).await {
+                                        match reset_all_user_progress(&pool).await {
                                             Ok(_) => eprintln!("database reset successfully"),
                                             Err(e) => eprintln!("database reset failed: {}", e),
                                         }
@@ -232,16 +209,6 @@ fn Setting() -> Element {
 }
 
 
-
-
-
-#[component]
-fn OutputPanel() -> Element {
-    let shared_text = use_context::<Signal<String>>();
-    rsx! {
-        div { "Output: {shared_text}" }
-    }
-}
 
 
 // this function returns a tts voice based on lang and Geneder enum in tts crate

@@ -1,6 +1,6 @@
 
 
-use dioxus::{prelude::*};
+use dioxus::prelude::*;
 use crate::db::*;
 use sqlx::sqlite::SqlitePoolOptions;
 use crate::Route;
@@ -12,13 +12,16 @@ use crate::return_voice;
 pub fn GenerateCard() -> Element {
 
     let mut number_of_cards = use_signal(|| 15);
-    let mut tag_level = use_signal(|| TagLevel::N5.to_string());
+    let mut jlpt_lv = use_signal(|| JLPTlv::N5.to_string());
     let mut j_to_e= use_signal(|| true);
     let mut unfamiliar_only = use_signal(|| true);
     let mut random_shuffle = use_signal(|| true);
     let mut user_mark = use_signal(|| false);
+    let mut info_message = use_signal(|| String::new());
     let navigator = use_navigator();
 
+    let db_pool = use_context::<sqlx::SqlitePool>();
+    let pool_ge = db_pool.clone();
 
 
 
@@ -26,7 +29,7 @@ pub fn GenerateCard() -> Element {
     rsx!(
         div {
             class: "container mt-2 p-4 border rounded shadow-sm bg-dark", // Bootstrap container with some styling
-            // Top Row: Number of Cards and Tag Level
+            // Top Row: Number of Cards and jlpt Level
             div { class: "row mb-3 g-3 align-items-end", // g-3 for gutters between columns
                 div { class: "col-md-6", // Takes half width on medium screens and up
                     label { class: "form-label", r#for: "numCardsSelect", "Number of Cards:" }
@@ -51,19 +54,19 @@ pub fn GenerateCard() -> Element {
                     }
                 
                 div { class: "col-md-6", // Takes half width on medium screens and up
-                    label { class: "form-label", r#for: "tagLevelSelect", "Tag Level:" }
+                    label { class: "form-label", r#for: "JLPTlvSelect", "jlpt Level:" }
                     select {
                         class: "form-select",
-                        id: "tagLevelSelect",
-                        value: "{tag_level}",
+                        id: "JLPTlvSelect",
+                        value: "{jlpt_lv}",
                         oninput: move |evt| {
                             // Update the level based on dropdown selection
-                            tag_level.set(evt.value()); },
-                        option { value: TagLevel::N1.to_string(), "n1" }
-                        option { value: TagLevel::N2.to_string(), "n2" }
-                        option { value: TagLevel::N3.to_string(), "n3" }
-                        option { value: TagLevel::N4.to_string(), "n4" }
-                        option { value: TagLevel::N5.to_string(), "n5" }
+                            jlpt_lv.set(evt.value()); },
+                        option { value: JLPTlv::N1.to_string(), "n1" }
+                        option { value: JLPTlv::N2.to_string(), "n2" }
+                        option { value: JLPTlv::N3.to_string(), "n3" }
+                        option { value: JLPTlv::N4.to_string(), "n4" }
+                        option { value: JLPTlv::N5.to_string(), "n5" }
                     }
                 }
             }
@@ -123,57 +126,57 @@ pub fn GenerateCard() -> Element {
             }
 
             // Button Row (or part of the second row)
-            div { class: "row",
-                div { class: "col-12 text-end", // Align button to the right
+            div { 
+                // 1. Use flexbox to align items.
+                //    `justify-content-end` pushes everything to the right.
+                //    `align-items-center` vertically centers the message and button.
+                class: "row d-flex justify-content-end align-items-center",
+                
+                // 2. The new message block. It's inside the flex row.
+                div { class: "col-auto", // `col-auto` makes it only as wide as its content
+                    if !info_message().is_empty() {
+                        // Display the message with some margin on the right (me-3)
+                        p { class: "alert alert-warning text-center mb-0 me-3", "{info_message}" }
+                    }
+                }
+                
+                // 3. The button block, also using `col-auto`.
+                div { class: "col-auto",
                     button {
-                        class: "btn btn-primary btn-lg", // Bootstrap primary button, large
-                        r#type: "button", // Important to prevent form submission if wrapped in <form>
-                        onclick: move |_| async move {
-                            // Handle card generation logic here
-                            // You can access the signal values:
-                            // num_cards(), tag_level(), j_to_e(), etc.
-                            eprintln!(
-                                "Generate Cards Clicked! Settings: Cards={}, Level='{}', JtoE={}, Unfamiliar={}, Shuffle={}, UserMark={}",
-                                number_of_cards(),
-                                tag_level(),
-                                j_to_e(),
-                                unfamiliar_only(),
-                                random_shuffle(),
-                                user_mark()
-                            );
-                            // Potentially call another function or update another signal
+                        class: "btn btn-primary btn-lg",
+                        r#type: "button",
+                        onclick: move |_| {
+                            // Clear any previous message
+                            info_message.set(String::new());
 
-                            // retrieve data
-                            let mut select_words = use_context::<Signal<Vec<WordRecord>>>();
+                            let pool = pool_ge.clone();
+                            // We need to clone the signal to move it into the async block
 
-                            match SqlitePoolOptions::new()
-                                .max_connections(5)
-                                .connect(DB_URL)
-                                .await {
-                                    Ok(pool) => {
-                                        let tag = TagLevel::from_string(&tag_level()).unwrap();
-                                        let num = number_of_cards();
-                                        let random = random_shuffle();
-                                        match get_unfamiliar_words(&pool, tag, num, random).await {
-                                            Ok(records) => {
-                                                // load the records
-                                                select_words.set(records);
-                                            },
-                                            Err(e) => {
-                                                eprintln!("Error fetching word IDs: {}", e);
-                                            }
+                            async move {
+                                eprintln!("Generate Cards Clicked! ..."); // Your logging
+
+                                let mut select_words = use_context::<Signal<Vec<WordRecord>>>();
+                                let jlpt = JLPTlv::from_string(&jlpt_lv()).unwrap();
+                                let num = number_of_cards();
+                                let random = random_shuffle();
+
+                                match return_words_by_user_progress(&pool, jlpt, 0, !unfamiliar_only(), user_mark(), num, random).await {
+                                    Ok(records) => {
+                                        if records.is_empty() {
+                                            // Set the message and DO NOT navigate
+                                            info_message.set("No cards found for these settings.".to_string());
+                                        } else {
+                                            // Load records and navigate
+                                            select_words.set(records);
+                                            navigator.push(Route::DisplayCard { j_to_e: j_to_e() });
                                         }
                                     },
                                     Err(e) => {
-                                        eprintln!("Error connecting to database: {}", e);
-                                        ()
+                                        eprintln!("Error fetching word IDs: {}", e);
+                                        info_message.set("A database error occurred.".to_string());
                                     }
-                                };
-                            
-                            navigator.push(Route::DisplayCard { j_to_e: j_to_e() } );
-
-
-
+                                }
+                            }
                         },
                         "Generate Card"
                     }
@@ -196,6 +199,8 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
     let mut show_question = use_signal(|| true);
     let mut show_reading = use_signal(|| true);
     let mut show_answer = use_signal(|| false);
+    let mut is_marked = use_signal(|| false);
+
 
     // --- content for UI ---
     let mut question = use_signal(|| "".to_string());
@@ -213,19 +218,27 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
     let voice = return_voice("ja", Gender::Male)?;
     
 
+    // --- setup button class and icon for user_mark
+    let button_class = if is_marked() {
+        "btn btn-lg btn-warning" // Solid yellow if marked
+        } else {
+            "btn btn-lg btn-outline-warning" // Outline if not marked
+        };
+    let star_icon = if is_marked() { "★" } else { "☆" }; // Solid vs. Outline star
+
 
     // 1. --- Refactored Logic: Create a reusable closure to load a card ---
     // This closure takes the index of the card to load.
     let mut load_card = move |card_index: usize| {
         if let Some(word) = select_words.get(card_index) {
             eprintln!("Loading card at index {}: {:?}", card_index, word);
+            reading.set(word.reading.clone());
+            is_marked.set(word.user_mark);
             if j_to_e {
                 question.set(word.expression.clone());
-                reading.set(word.reading.clone());
                 answer.set(word.meaning.clone());
             } else {
                 question.set(word.meaning.clone());
-                reading.set(word.reading.clone());
                 answer.set(word.expression.clone());
             }
             // Always hide the answer when loading a new card
@@ -288,38 +301,38 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
 
             // --- Main Content ---
             div { class: "row flex-grow-1 d-flex flex-column justify-content-center",
-                // 1. Wrap the heading and button in a flex container
                 div { class: "col d-flex justify-content-between align-items-center",
             
-                    // 2. The original h2 tag
-                    // I've added mb-0 to remove its default bottom margin for better alignment
                     p { class: "lead my-3",
                         if show_question() { "{question()}" } else { "" }
                     }
 
-                    // 3. The new star button, with spacing on its left (ms-3)
                     button { 
-                        class: "btn btn-lg btn-outline-warning ms-3", 
-                        // todo: display star based on user_mark field
-                        // Using a Unicode star character for the icon
-                        // onclick: move |_| {
-                        // let pool = pool_um.clone();
-                        // let word_id = select_words.get(index()).unwrap().id;
-                        // eprintln!("word_id: {}", word_id);
-                        
-                        // spawn (async move {
-                        //     match mark_word(&pool, word_id).await {
-                        //         Ok(_) => {
-                        //             eprintln!("id {:?} for marked successfully", word_id);
-                        //         }
-                        //         Err(e) => {
-                        //             eprintln!("Background update failed: {}", e);
-                        //         },
-                        //     }
+                        class: button_class, 
 
-                        //     });
-                        // },
-                        "★" 
+                        onclick: move |_| {
+                            let pool = pool_um.clone();
+                            let word_id = select_words.get(index()).unwrap().id;
+                            eprintln!("word_id: {}", word_id);
+                            
+                            async move {
+
+                                match ProgressUpdate::new()
+                                    .set_user_mark(!is_marked())
+                                    .execute(&pool, word_id)
+                                    .await {
+                                        Ok(_) => {
+                                            eprintln!("id {:?} marked {:?} successfully", word_id, !is_marked());
+                                        }
+                                        Err(e) => {
+                                            eprintln!("Background update failed: {}", e);
+                                        }, 
+                                    }
+                                is_marked.set(!is_marked());
+                            }
+                            
+                        },
+                        {star_icon}
                     }
                 }
 
@@ -410,14 +423,18 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                         
                         // in normal rust, async move won't be executed unless you call await, or use spawn in Dioxus
                         spawn (async move {
-                            match update_familiar(&pool, word_id, false).await {
-                                Ok(_) => {
-                                    eprintln!("id {:?} for unfamiliar updated successfully", word_id);
+                            match ProgressUpdate::new()
+                                .increment_practice_time()
+                                .set_familiar(false)
+                                .execute(&pool, word_id)
+                                .await {
+                                    Ok(_) => {
+                                        eprintln!("id {:?} for unfamiliar updated successfully", word_id);
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Background update failed: {}", e);
+                                    }, 
                                 }
-                                Err(e) => {
-                                    eprintln!("Background update failed: {}", e);
-                                },
-                            }
 
                             go_to_next_card();
                         });
@@ -433,14 +450,19 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                         
                         // but in Dioxus 6.0, they add new function to auto spawn
                         async move {
-                            match update_familiar(&pool, word_id, true).await {
-                                Ok(_) => {
-                                    eprintln!("id {:?} for familiar updated successfully", word_id);
+                            match ProgressUpdate::new()
+                                .increment_practice_time()
+                                .set_familiar(true)
+                                .execute(&pool, word_id)
+                                .await {
+                                    Ok(_) => {
+                                        eprintln!("id {:?} for familiar updated successfully", word_id);
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Background update failed: {}", e);
+                                    }, 
                                 }
-                                Err(e) => {
-                                    eprintln!("Background update failed: {}", e);
-                                },
-                            }
+
 
                             go_to_next_card();
                         }

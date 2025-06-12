@@ -1,11 +1,10 @@
 
-use sqlx::sqlite::SqlitePoolOptions;
+use sqlx::sqlite::{self, SqlitePoolOptions};
 use sqlx::{migrate::MigrateDatabase, Sqlite};
 use sqlx::Row;
 use std::error::Error;
 use std::fs;
-use csv::{ReaderBuilder, StringRecord};
-use rand::seq::SliceRandom;
+use csv::{ReaderBuilder};
 
 pub const DB_URL: &str = "sqlite:data/words_database.db";
 
@@ -17,11 +16,14 @@ pub enum WordField {
     Expression,
     Reading,
     Meaning,
-    Tags(TagLevel),
+    JLPT(JLPTlv),
+    PracticeTime,
+    Familiar,
+    UserMark,
 }
 
 #[derive(Debug)]
-pub enum TagLevel {
+pub enum JLPTlv {
     N1,
     N2,
     N3,
@@ -29,23 +31,23 @@ pub enum TagLevel {
     N5,
 }
 
-impl TagLevel {
+impl JLPTlv {
     pub fn to_string(&self) -> String {
         match self {
-            TagLevel::N1 => "n1".to_string(),
-            TagLevel::N2 => "n2".to_string(),
-            TagLevel::N3 => "n3".to_string(),
-            TagLevel::N4 => "n4".to_string(),
-            TagLevel::N5 => "n5".to_string(),
+            JLPTlv::N1 => "n1".to_string(),
+            JLPTlv::N2 => "n2".to_string(),
+            JLPTlv::N3 => "n3".to_string(),
+            JLPTlv::N4 => "n4".to_string(),
+            JLPTlv::N5 => "n5".to_string(),
         }
     }
-    pub fn from_string(tag: &str) -> Option<TagLevel> {
-        match tag {
-            "n1" => Some(TagLevel::N1),
-            "n2" => Some(TagLevel::N2),
-            "n3" => Some(TagLevel::N3),
-            "n4" => Some(TagLevel::N4),
-            "n5" => Some(TagLevel::N5),
+    pub fn from_string(jlpt: &str) -> Option<JLPTlv> {
+        match jlpt {
+            "n1" => Some(JLPTlv::N1),
+            "n2" => Some(JLPTlv::N2),
+            "n3" => Some(JLPTlv::N3),
+            "n4" => Some(JLPTlv::N4),
+            "n5" => Some(JLPTlv::N5),
             _ => None,
         }
     }
@@ -76,9 +78,13 @@ impl WordField {
             WordField::Expression => "expression".to_string(),
             WordField::Reading => "reading".to_string(),
             WordField::Meaning => "meaning".to_string(),
-            WordField::Tags(tag_level) => { 
-                tag_level.to_string()
-            }
+            WordField::JLPT(jlptlv) => { 
+                jlptlv.to_string()
+               }
+            WordField::PracticeTime => "practice_time".to_string(),
+            WordField::Familiar => "familiar".to_string(),
+            WordField::UserMark => "user_mark".to_string(),
+    
         }
     }
 }
@@ -90,13 +96,17 @@ pub struct WordRecord {
     pub expression: String,
     pub reading: String,
     pub meaning: String,
-    pub tags: String,
+    pub jlpt: String,
+    pub practice_time: i64,
+    pub familiar: bool,
+    pub user_mark: bool,
+
 }
 
 pub fn load_csv_to_word_records(
     file_path: &str,
     records: &mut Vec<WordRecord>,
-    tag: &str,
+    jplt: &str,
 ) -> Result<(), Box<dyn Error>> {
     let mut rdr = ReaderBuilder::new().from_path(file_path)?;
     for result in rdr.records() {
@@ -110,7 +120,10 @@ pub fn load_csv_to_word_records(
             expression: record[0].to_string(),
             reading: record[1].to_string(),
             meaning: record[2].to_string(),
-            tags: tag.to_string(),
+            jlpt: jplt.to_string(), // manually pass jlpt level for each jlpt csv
+            practice_time: 0, // DB auto assign 0 when initiate
+            familiar: false, // DB  auto assign false when initiate
+            user_mark: false, // DB auto assign false when initiate
         });
     }
     Ok(())
@@ -148,25 +161,18 @@ pub async fn create_table(pool: &sqlx::SqlitePool) -> Result<(), sqlx::Error> {
             expression TEXT NOT NULL,
             reading TEXT NOT NULL,
             meaning TEXT NOT NULL,
-            tags TEXT NOT NULL
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
+            jlpt TEXT NOT NULL, 
 
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS familiarity (
-            id INTEGER PRIMARY KEY REFERENCES words(id) ON DELETE CASCADE,
-            practice_time INTEGER NOT NULL,
-            familiar BOOLEAN NOT NULL,
-            user_mark BOOLEAN NOT NULL DEFAULT 0
+            -- User Progress Fields --
+            practice_time INTEGER NOT NULL DEFAULT 0,
+            familiar      BOOLEAN NOT NULL DEFAULT 0,
+            user_mark     BOOLEAN NOT NULL DEFAULT 0
         )
         "#,
     )
     .execute(pool)
     .await?;
+   
 
     Ok(())
 }
@@ -177,13 +183,13 @@ pub async fn bulk_insert_words(pool: &sqlx::SqlitePool, records: Vec<WordRecord>
     for record in records {
         sqlx::query(
             r#"
-            INSERT INTO words (expression, reading, meaning, tags)
+            INSERT INTO words (expression, reading, meaning, jlpt)
             VALUES (?, ?, ?, ?)
             "#,)
             .bind(&record.expression)
             .bind(&record.reading)
             .bind(&record.meaning)
-            .bind(&record.tags)
+            .bind(&record.jlpt)
             .execute(&mut *transaction)
             .await?;
     }
@@ -225,79 +231,57 @@ pub async fn find_word_by_ids(pool: &sqlx::SqlitePool, ids: Vec<i64>) -> Result<
                 expression: row.get::<String, _>("expression"),
                 reading: row.get::<String, _>("reading"),
                 meaning: row.get::<String, _>("meaning"),
-                tags: row.get::<String, _>("tags"),
+                jlpt: row.get::<String, _>("jlpt"),
+                practice_time: row.get::<i64, _>("practice_time"),
+                familiar: row.get::<bool, _>("familiar"),
+                user_mark: row.get::<bool, _>("user_mark"),
             });
         }
     }
     Ok(records)
 }
 
-pub async fn get_unfamiliar_word_ids(
-    pool: &sqlx::SqlitePool,
-    tag: TagLevel,
+
+pub async fn return_words_by_user_progress(
+    pool: &sqlx::SqlitePool, 
+    jlpt: JLPTlv,
+    practice_time: i64, 
+    familiar: bool, 
+    user_mark: bool,
     num: usize,
     random: bool,
-) -> Result<Vec<i64>, sqlx::Error> {
-    // Query for word ids with the given tag that are either not in familiarity or familiar is false
-    let tag_str = tag.to_string();
-    let rows = sqlx::query(
-        r#"
-        SELECT w.id
-        FROM words w
-        LEFT JOIN familiarity f ON w.id = f.id
-        WHERE w.tags = ? AND (f.id IS NULL OR f.familiar = 0)
-        "#,
-    )
-    .bind(&tag_str)
-    .fetch_all(pool)
-    .await?;
 
-    let mut ids: Vec<i64> = rows.iter().map(|row| row.get::<i64, _>("id")).collect();
-
-    if random {
-        let mut rng = rand::rng();
-        ids.shuffle(&mut rng);
-    }
-
-    Ok(ids.into_iter().take(num).collect())
-}
-
-pub async fn get_unfamiliar_words(
-    pool: &sqlx::SqlitePool,
-    tag: TagLevel,
-    num: usize,
-    random: bool,
 ) -> Result<Vec<WordRecord>, sqlx::Error> {
-    // Query for word ids with the given tag that are either not in familiarity or familiar is false
-    let tag_str = tag.to_string();
+
+    let jlpt_str = jlpt.to_string();
     let query = if random {
         format!(
             r#"
-            SELECT w.*
-            FROM words w
-            LEFT JOIN familiarity f ON w.id = f.id
-            WHERE w.tags = ? AND (f.id IS NULL OR f.familiar = 0)
+            SELECT *
+            FROM words
+            WHERE jlpt = ? AND practice_time >= ? AND familiar = ? AND user_mark = ?
             ORDER BY RANDOM()
             LIMIT {}
             "#,
             num
         )
-    } else {
+    }  else {
         format!(
             r#"
-            SELECT w.*
-            FROM words w
-            LEFT JOIN familiarity f ON w.id = f.id
-            WHERE w.tags = ? AND (f.id IS NULL OR f.familiar = 0)
+            SELECT *
+            FROM words
+            WHERE jlpt = ? AND practice_time >= ? AND familiar = ? AND user_mark = ?
             LIMIT {}
             "#,
             num
         )
     };
-    
 
     let rows = sqlx::query(&query)
-        .bind(&tag_str)
+        .bind(&jlpt_str)
+        .bind(practice_time)
+        .bind(familiar)
+        .bind(user_mark)
         .fetch_all(pool)
         .await?;
 
@@ -308,140 +292,46 @@ pub async fn get_unfamiliar_words(
             expression: row.get::<String, _>("expression"),
             reading: row.get::<String, _>("reading"),
             meaning: row.get::<String, _>("meaning"),
-            tags: row.get::<String, _>("tags"),
+            jlpt: row.get::<String, _>("jlpt"),
+            practice_time: row.get::<i64, _>("practice_time"),
+            familiar: row.get::<bool, _>("familiar"),
+            user_mark: row.get::<bool, _>("user_mark"),
         })
         .collect();
-    eprintln!("get_unfamiliar_words function called");
+    eprintln!("return_words_by_user_progress called");
     Ok(records)
 }
 
-// this function is not needed, update_familiarity will handle both insert and update
-pub async fn increment_practice_time(pool: &sqlx::SqlitePool, word_id: i64) -> Result<(), sqlx::Error> {
-    // Try to update
-    let result = sqlx::query("UPDATE familiarity SET practice_time = practice_time + 1 WHERE id = ?")
-        .bind(word_id)
-        .execute(pool)
-        .await?;
 
-    if result.rows_affected() == 0 {
-        // If no row was updated, insert a new one with practice_time = 1 and familiar = false (0)
-        sqlx::query("INSERT INTO familiarity (id, practice_time, familiar) VALUES (?, 1, 0)")
-            .bind(word_id)
-            .execute(pool)
-            .await?;
-    }
 
-    Ok(())
-}
 
-pub async fn update_familiar(pool: &sqlx::SqlitePool, word_id: i64, familiar: bool) -> Result<(), sqlx::Error> {
-    let result = sqlx::query("UPDATE familiarity SET familiar = ?, practice_time = practice_time + 1 WHERE id = ?")
+// do not use this, use ProgressUpdate instead
+pub async fn update_user_progress(pool: &sqlx::SqlitePool, word_id: i64, familiar: bool, user_mark: bool) -> Result<(), sqlx::Error> {
+
+    sqlx::query("UPDATE words SET practice_time = practice_time + 1, familiar = ?, user_mark = ? WHERE id = ?")
         .bind(familiar)
+        .bind(user_mark)
         .bind(word_id)
         .execute(pool)
         .await?;
-
-    if result.rows_affected() == 0 {
-        // If no row was updated, insert a new one
-        sqlx::query("INSERT INTO familiarity (id, practice_time, familiar) VALUES (?, 1, ?)")
-            .bind(word_id)
-            .bind(familiar)
-            .execute(pool)
-            .await?;
-    }
-
 
     Ok(())
 }
 
 
-pub async fn mark_word(pool: &sqlx::SqlitePool, word_id: i64) -> Result<(), sqlx::Error> {
-    // Attempt to update the user_mark for an existing record.
-    let result = sqlx::query("UPDATE familiarity SET user_mark = 1 WHERE id = ?")
-        .bind(word_id)
-        .execute(pool)
-        .await?;
 
-    // If no record was updated, we need to insert one.
-    if result.rows_affected() == 0 {
-        // Insert a new record with default values for practice/familiarity,
-        // but with `user_mark` explicitly set to true (1).
-        sqlx::query(
-            "INSERT INTO familiarity (id, practice_time, familiar, user_mark) VALUES (?, 0, 0, 1)",
-        )
-        .bind(word_id)
-        .execute(pool)
-        .await?;
-    }
-    Ok(())
-}
-
-pub async fn return_marked_words(
-    pool: &sqlx::SqlitePool,
-    tag_level: Option<TagLevel>,
-) -> Result<Vec<WordRecord>, sqlx::Error> {
-    let query_string = match tag_level {
-        Some(_) => {
-            r#"
-                SELECT w.id, w.expression, w.reading, w.meaning, w.tags
-                FROM words w
-                INNER JOIN familiarity f ON w.id = f.id
-                WHERE f.user_mark = 1 AND w.tags = ?
-            "#
-        }
-        None => {
-            r#"
-                SELECT w.id, w.expression, w.reading, w.meaning, w.tags
-                FROM words w
-                INNER JOIN familiarity f ON w.id = f.id
-                WHERE f.user_mark = 1
-            "#
-        }
-    };
-
-    // Start building the query
-    let mut query = sqlx::query(query_string);
-
-    // Bind the tag_level value only if it exists
-    if let Some(tag) = tag_level {
-        query = query.bind(tag.to_string());
-    }
-
-    // Fetch all rows from the database
-    let rows = query.fetch_all(pool).await?;
-
-    // Manually map each row to a WordRecord struct
-    let records = rows
-        .into_iter()
-        .map(|row| WordRecord {
-            id: row.get("id"),
-            expression: row.get("expression"),
-            reading: row.get("reading"),
-            meaning: row.get("meaning"),
-            tags: row.get("tags"),
-        })
-        .collect();
-
-    Ok(records)
-}
-
-
-
-
-pub async fn reset_familiarity(pool: &sqlx::SqlitePool) -> Result<(), sqlx::Error> {
+// todo: not yet test
+pub async fn reset_all_user_progress(pool: &sqlx::SqlitePool) -> Result<(), sqlx::Error> {
+    // This query resets all progress fields for all words back to their default state.
     sqlx::query(
-        "DELETE FROM familiarity"
+        "UPDATE words SET practice_time = 0, familiar = 0, user_mark = 0"
     )
     .execute(pool)
     .await?;
-
-    // Optional: Reclaim disk space in SQLite.
-    // For most applications this is not necessary, but if you have a very large
-    // database and are concerned about file size, you can run VACUUM.
-    // sqlx::query("VACUUM").execute(pool).await?;
-
     Ok(())
 }
+
+
 
 
 
@@ -481,18 +371,95 @@ pub async fn insert_words(pool: &sqlx::SqlitePool, records: Vec<WordRecord>) -> 
     for record in records {
         sqlx::query(
             r#"
-            INSERT INTO words (expression, reading, meaning, tags)
+            INSERT INTO words (expression, reading, meaning, jlpt)
             VALUES (?, ?, ?, ?)
             "#,)
             .bind(&record.expression)
             .bind(&record.reading)
             .bind(&record.meaning)
-            .bind(&record.tags)
+            .bind(&record.jlpt)
             .execute(pool)
             .await?;
     }
     Ok(())
 }
+
+
+
+
+
+// This struct defines the changes we might want to make.
+#[derive(Default)]
+pub struct ProgressUpdate {
+    increment_practice: bool,
+    familiar: Option<bool>,
+    user_mark: Option<bool>,
+}
+
+impl ProgressUpdate {
+    // Start with a new, empty update operation.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    // Chainable method to set the 'familiar' status.
+    pub fn set_familiar(mut self, value: bool) -> Self {
+        self.familiar = Some(value);
+        self
+    }
+
+    // Chainable method to set the 'user_mark' status.
+    pub fn set_user_mark(mut self, value: bool) -> Self {
+        self.user_mark = Some(value);
+        self
+    }
+    
+    // Chainable method to indicate we should increment the practice time.
+    pub fn increment_practice_time(mut self) -> Self {
+        self.increment_practice = true;
+        self
+    }
+
+    /// Executes the update operation against the database.
+    pub async fn execute(self, pool: &sqlx::SqlitePool, word_id: i64) -> Result<(), sqlx::Error> {
+        // 1. Check for changes at the very top. It's more efficient.
+        if !self.increment_practice && self.familiar.is_none() && self.user_mark.is_none() {
+            eprintln!("Update called with no changes, doing nothing.");
+            return Ok(());
+        }
+
+        // Create a dynamic query builder.
+        let mut builder = sqlx::QueryBuilder::new("UPDATE words SET ");
+        let mut separated = builder.separated(", ");
+
+        if self.increment_practice {
+            separated.push("practice_time = practice_time + 1");
+        }
+        if let Some(val) = self.familiar {
+            // 2. THE FIX: Push the SQL and bind the value as one logical unit.
+            separated.push("familiar = ").push_bind_unseparated(val);
+        }
+        if let Some(val) = self.user_mark {
+            // 3. THE FIX: Do the same for user_mark.
+            separated.push("user_mark = ").push_bind_unseparated(val);
+        }
+
+        // Add the final WHERE clause.
+        builder.push(" WHERE id = ");
+        builder.push_bind(word_id);
+
+        // Build and execute the query.
+        builder.build().execute(pool).await?;
+
+        Ok(())
+    }
+
+
+}
+
+
+
+
 
 
 
@@ -521,11 +488,11 @@ mod tests {
     /// Helper function to create fake word data.
     fn create_fake_data() -> Vec<WordRecord> {
         vec![
-            WordRecord { id: 0, expression: "一".to_string(), reading: "いち".to_string(), meaning: "one".to_string(), tags: "n5".to_string() },
-            WordRecord { id: 0, expression: "二".to_string(), reading: "に".to_string(), meaning: "two".to_string(), tags: "n5".to_string() },
-            WordRecord { id: 0, expression: "時間".to_string(), reading: "じかん".to_string(), meaning: "time".to_string(), tags: "n4".to_string() },
-            WordRecord { id: 0, expression: "経済".to_string(), reading: "けいざい".to_string(), meaning: "economy".to_string(), tags: "n1".to_string() },
-            WordRecord { id: 0, expression: "政治".to_string(), reading: "せいじ".to_string(), meaning: "politics".to_string(), tags: "n1".to_string() },
+            WordRecord { id: 0, expression: "一".to_string(), reading: "いち".to_string(), meaning: "one".to_string(), jlpt: "n5".to_string(), practice_time: 0, familiar: false, user_mark: false },
+            WordRecord { id: 0, expression: "二".to_string(), reading: "に".to_string(), meaning: "two".to_string(), jlpt: "n5".to_string() , practice_time: 0, familiar: false, user_mark: false },
+            WordRecord { id: 0, expression: "時間".to_string(), reading: "じかん".to_string(), meaning: "time".to_string(), jlpt: "n4".to_string() , practice_time: 0, familiar: false, user_mark: false },
+            WordRecord { id: 0, expression: "経済".to_string(), reading: "けいざい".to_string(), meaning: "economy".to_string(), jlpt: "n1".to_string() , practice_time: 0, familiar: false, user_mark: false },
+            WordRecord { id: 0, expression: "政治".to_string(), reading: "せいじ".to_string(), meaning: "politics".to_string(), jlpt: "n1".to_string() , practice_time: 0, familiar: false, user_mark: false },
         ]
     }
 
@@ -549,86 +516,39 @@ mod tests {
             .unwrap();
         assert_eq!(count, 5);
         println!("-> Verified: 5 words inserted.");
-
-        // 3.4: Test all DB functions
-        println!("STEP 4: Testing all DB functions...");
-
-        // Test `update_familiar`: Make word with id=1 familiar.
-        // This will create a familiarity record for it.
-        println!("  - Testing update_familiar...");
-        update_familiar(&pool, 1, true).await.unwrap();
-        let familiar_status: bool = sqlx::query_scalar("SELECT familiar FROM familiarity WHERE id = 1")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert!(familiar_status, "Word 1 should be familiar.");
-        println!("  -> Verified: update_familiar works.");
-
-        // Test `mark_word` on a word that already has a familiarity record (id=1)
-        println!("  - Testing mark_word (on existing familiarity record)...");
-        mark_word(&pool, 1).await.unwrap();
-        let mark_status: bool = sqlx::query_scalar("SELECT user_mark FROM familiarity WHERE id = 1")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert!(mark_status, "Word 1 should be marked.");
-        println!("  -> Verified: mark_word (update) works.");
         
-        // Test `mark_word` on a word with no familiarity record (id=3)
-        println!("  - Testing mark_word (on new familiarity record)...");
-        mark_word(&pool, 3).await.unwrap();
-        let mark_status_3: bool = sqlx::query_scalar("SELECT user_mark FROM familiarity WHERE id = 3")
-            .fetch_one(&pool)
+        // Check progressUpdate
+        ProgressUpdate::new()
+            .set_familiar(true)
+            .set_user_mark(true)
+            .increment_practice_time()
+            .execute(&pool, 2)
             .await
-            .unwrap();
-        assert!(mark_status_3, "Word 3 should be marked.");
-         let practice_time_3: i64 = sqlx::query_scalar("SELECT practice_time FROM familiarity WHERE id = 3")
-            .fetch_one(&pool)
+            .expect("Failed to update progress.");
+
+        let word = find_word_by_ids(&pool, vec![2 as i64])
             .await
-            .unwrap();
-        assert_eq!(practice_time_3, 0, "Practice time should be 0 for new marked word.");
-        println!("  -> Verified: mark_word (insert) works.");
+            .expect("Failed to find word by ID.");
 
-        // Mark another word (id=4, "経済") for the next test
-        mark_word(&pool, 4).await.unwrap();
+        println!("word = {:?}", word);
+        assert_eq!(word[0].practice_time, 1 as i64);
+        assert_eq!(word[0].familiar, true);
+        assert_eq!(word[0].user_mark, true);
+        println!("-> Verified: Progress updated correctly.");
+    
 
-        // Test `return_marked_words` with None (should return all marked words: 1, 3, 4)
-        println!("  - Testing return_marked_words(None)...");
-        let all_marked = return_marked_words(&pool, None).await.unwrap();
-        assert_eq!(all_marked.len(), 3);
-        // Check if the IDs are correct, regardless of order
-        let marked_ids: Vec<i64> = all_marked.iter().map(|w| w.id).collect();
-        assert!(marked_ids.contains(&1));
-        assert!(marked_ids.contains(&3));
-        assert!(marked_ids.contains(&4));
-        println!("  -> Verified: return_marked_words(None) returns 3 words.");
-
-        // Test `return_marked_words` with Some(TagLevel::N1) (should return word 4: "経済")
-        println!("  - Testing return_marked_words(Some(N1))...");
-        let n1_marked = return_marked_words(&pool, Some(TagLevel::N1)).await.unwrap();
-        assert_eq!(n1_marked.len(), 1);
-        assert_eq!(n1_marked[0].id, 4);
-        assert_eq!(n1_marked[0].expression, "経済");
-        println!("  -> Verified: return_marked_words(Some(N1)) returns 1 word.");
-        
-        // Test `get_unfamiliar_word_ids` to ensure it correctly identifies unfamiliar words
-        println!("  - Testing get_unfamiliar_word_ids(N5)...");
-        // Word 1 (id=1) is familiar. Word 2 (id=2) is unfamiliar. Words 3,4,5 are not N5.
-        let unfamiliar_n5 = get_unfamiliar_word_ids(&pool, TagLevel::N5, 2, false).await.unwrap();
-        assert_eq!(unfamiliar_n5.len(), 1, "Should only be one unfamiliar N5 word.");
-        assert_eq!(unfamiliar_n5[0], 2);
-        println!("  -> Verified: get_unfamiliar_word_ids works correctly.");
-
-        // Test `reset_familiarity`
-        println!("  - Testing reset_familiarity...");
-        reset_familiarity(&pool).await.unwrap();
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM familiarity")
-            .fetch_one(&pool)
+        // Reset progress test
+        reset_all_user_progress(&pool)
             .await
-            .unwrap();
-        assert_eq!(count, 0, "Familiarity table should be empty after reset.");
-        println!("  -> Verified: reset_familiarity works.");
+            .expect("Failed to reset progress.");
 
-        println!("\nALL TESTS PASSED!");
+        let word = find_word_by_ids(&pool, vec![2 as i64])
+            .await
+            .expect("Failed to find word by ID.");
+
+        assert_eq!(word[0].practice_time, 0 as i64);
+        assert_eq!(word[0].familiar, false);
+        assert_eq!(word[0].user_mark, false);
+        println!("-> Verified: Progress reset correctly.");        
     }
 }
