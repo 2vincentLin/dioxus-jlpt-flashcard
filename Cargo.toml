@@ -16,6 +16,7 @@ rand = "0.9.1" # For generating random numbers
 
 csv = "1.3.1" # For reading and writing CSV files
 serde = { version = "1.0.219", features = ["derive"] } # For deserializing CSV data into structs
+tts = "0.26.3" # for text to voice
 
 [features]
 default = ["desktop"]

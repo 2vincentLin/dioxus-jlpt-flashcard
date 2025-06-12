@@ -48,7 +48,7 @@ fn main() {
 #[component]
 fn App() -> Element {
     let shared_text = use_signal(|| "".to_string());
-    // this will be used in flashcard to hold the retrieve data
+    // this will be used in flashcard to hold the retrieved data
     let mut select_words = use_signal(|| Vec::<WordRecord>::new());
 
     provide_context(shared_text.clone()); // now available to all children

@@ -1,14 +1,10 @@
 pub mod db;
 pub mod flashcard;
-pub mod nav;
 pub mod test;
 
-
+use tts::*;
 
 use dioxus::prelude::*;
-use flashcard::FlashCard;
-use nav::DataDisplayPage;
-use nav::FetchAndNavigateComponent;
 use test::TextInputPanel;
 use flashcard::{GenerateCard, DisplayCard};
 
@@ -22,10 +18,6 @@ pub enum Route {
     #[layout(Navbar)]
     #[route("/")]
     Home {},
-    #[route("/blog/:id")]
-    Blog { id: i32 },
-    #[route("/flashcard1")]
-    FlashCard {},
     #[route("/flaschard")]
     GenerateCard {},
     #[route("/diaplay/:j_to_e")]
@@ -34,10 +26,7 @@ pub enum Route {
     TextInputPanel {},
     #[route("/output")]
     OutputPanel {},
-    #[route("/fetch")]
-    FetchAndNavigateComponent {},
-    #[route("/data_diaplay")]
-    DataDisplayPage {},
+
 }
 
 #[component]
@@ -98,28 +87,13 @@ pub fn Navbar() -> Element { // Encapsulating navbar in its own component is goo
                                 "Home"
                             }
                         }
-                        li { class: "nav-item",
-                            Link {
-                                class: "nav-link",
-                                to: Route::Blog { id: 1 }, // Example blog ID
-                                onclick: move |_| is_nav_open.set(false), // Close nav on link click
-                                "Blog"
-                            }
-                        }
-                        li { class: "nav-item",
-                            Link {
-                                class: "nav-link",
-                                to: Route::FlashCard {},
-                                onclick: move |_| is_nav_open.set(false), // Close nav on link click
-                                "FlashCard"
-                            }
-                        }
+                        
                         li { class: "nav-item",
                             Link {
                                 class: "nav-link",
                                 to: Route::GenerateCard {},
                                 onclick: move |_| is_nav_open.set(false), // Close nav on link click
-                                "Generate Card"
+                                "Flash Card"
                             }
                         }
                         li { class: "nav-item",
@@ -138,14 +112,7 @@ pub fn Navbar() -> Element { // Encapsulating navbar in its own component is goo
                                 "Output"
                             }
                         }
-                        li { class: "nav-item",
-                            Link {
-                                class: "nav-link",
-                                to: Route::FetchAndNavigateComponent {},
-                                onclick: move |_| is_nav_open.set(false), // Close nav on link click
-                                "Fetch Example"
-                            }
-                        }
+                        
                         // You can add more nav items (e.g., dropdowns) here if needed
                     }
                     // You could add other elements here, like a search form or user profile link,
@@ -162,59 +129,19 @@ pub fn Navbar() -> Element { // Encapsulating navbar in its own component is goo
 
 
 
-#[component]
-pub fn Hero() -> Element {
-    rsx! {
-        div {
-            id: "hero",
-            img { src: HEADER_SVG, id: "header" }
-            div { id: "links",
-                a { href: "https://dioxuslabs.com/learn/0.6/", "📚 Learn Dioxus" }
-                a { href: "https://dioxuslabs.com/awesome", "🚀 Awesome Dioxus" }
-                a { href: "https://github.com/dioxus-community/", "📡 Community Libraries" }
-                a { href: "https://github.com/DioxusLabs/sdk", "⚙️ Dioxus Development Kit" }
-                a { href: "https://marketplace.visualstudio.com/items?itemName=DioxusLabs.dioxus", "💫 VSCode Extension" }
-                a { href: "https://discord.gg/XgGxMSkvUM", "👋 Community Discord" }
-            }
-        }
-    }
-}
+
 
 /// Home page
 #[component]
 fn Home() -> Element {
     rsx! {
         // you can put two components in one component
-        Hero {}
-        Blog { id: 15 }
+        h1 {"This is a Japanese flash card app"}
 
     }
 }
 
-/// Blog page
-#[component]
-pub fn Blog(id: i32) -> Element {
-    rsx! {
-        div {
-            id: "blog",
 
-            // Content
-            h1 { "This is blog #{id}!" }
-            p { "In blog #{id}, we show how the Dioxus router works and how URL parameters can be passed as props to our route components." }
-
-            // Navigation links
-            Link {
-                to: Route::Blog { id: id - 1 },
-                "Previous"
-            }
-            span { " <---> " }
-            Link {
-                to: Route::Blog { id: id + 1 },
-                "Next"
-            }
-        }
-    }
-}
 
 #[component]
 fn OutputPanel() -> Element {
@@ -222,4 +149,23 @@ fn OutputPanel() -> Element {
     rsx! {
         div { "Output: {shared_text}" }
     }
+}
+
+
+// this function returns a tts voice based on lang and Geneder enum in tts crate
+pub fn return_voice(lang: &str, gender: Gender) -> Result<Voice, Error> {
+    let tts = Tts::default()?;
+
+    for voice in tts.voices()? {
+        
+        if voice.language().starts_with(lang) {
+
+            if gender == voice.gender().unwrap(){
+                eprintln!("Voice: {:?}", voice);
+                // tts.set_voice(&voice)?;
+                return Ok(voice);
+            }
+        }
+    }
+    Err(tts::Error::NoneError)
 }
