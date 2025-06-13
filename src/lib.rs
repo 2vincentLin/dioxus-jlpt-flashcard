@@ -228,3 +228,123 @@ pub fn return_voice(lang: &str, gender: Gender) -> Result<Voice, Error> {
     }
     Err(tts::Error::NoneError)
 }
+
+
+// possible pop up setup
+// https://dioxuslabs.com/learn/0.6/reference/event_handlers#handler-props
+
+// #[derive(Props, Clone, PartialEq)]
+// pub struct ConfirmModalProps {
+//     // Signal to control the visibility of the modal.
+//     // The parent component will set this to true to show the modal.
+//     // The modal itself will set it to false when an action is taken.
+//     pub show_dialog: Signal<bool>,
+//     pub title: String,
+//     pub message: String,
+//     // Optional custom text for the confirm button
+//     #[props(default = "Confirm".to_string())]
+//     pub confirm_button_text: String,
+//     // Optional custom text for the cancel button
+//     #[props(default = "Cancel".to_string())]
+//     pub cancel_button_text: String,
+//     // Callback for when the confirm button is clicked
+//     pub on_confirm: EventHandler<()>,
+//     // Optional callback for when the cancel button is clicked or modal is dismissed
+//     #[props(optional)]
+//     pub on_cancel: Option<EventHandler<()>>,
+// }
+
+
+// #[component]
+// pub fn ConfirmModal(props: ConfirmModalProps) -> Element {
+//     if !props.show_dialog() {
+//         return None; // Don't render anything if not visible
+//     }
+
+//     rsx! {
+//         // Modal backdrop
+//         div {
+//             class: "modal fade show d-block", // "show" and "d-block" make it visible
+//             style: "background-color: rgba(0, 0, 0, 0.5);", // Semi-transparent backdrop
+//             tabindex: "-1", // Allows closing with Escape key (Bootstrap behavior)
+//             role: "dialog",
+//             "aria-labelledby": "confirmModalLabel",
+//             "aria-modal": "true",
+
+//             // Modal dialog
+//             div { class: "modal-dialog modal-dialog-centered", // Vertically centered
+//                 div { class: "modal-content",
+//                     // Modal header
+//                     div { class: "modal-header",
+//                         h5 { class: "modal-title", id: "confirmModalLabel", "{props.title}" }
+//                         // Optional: Add a close button (X) in the header
+//                         // button {
+//                         //     r#type: "button",
+//                         //     class: "btn-close",
+//                         //     "data-bs-dismiss": "modal", // Bootstrap's way to close
+//                         //     "aria-label": "Close",
+//                         //     onclick: move |_| {
+//                         //         props.show_dialog.set(false);
+//                         //         if let Some(cb) = &props.on_cancel {
+//                         //             cb.call(());
+//                         //         }
+//                         //     }
+//                         // }
+//                     }
+//                     // Modal body
+//                     div { class: "modal-body",
+//                         p { "{props.message}" }
+//                     }
+//                     // Modal footer with action buttons
+//                     div { class: "modal-footer",
+//                         button {
+//                             class: "btn btn-secondary",
+//                             r#type: "button",
+//                             onclick: move |_| {
+//                                 props.show_dialog.set(false);
+//                                 if let Some(cb) = &props.on_cancel {
+//                                     cb.call(());
+//                                 }
+//                             },
+//                             "{props.cancel_button_text}"
+//                         }
+//                         button {
+//                             class: "btn btn-danger", // Or btn-primary, depending on context
+//                             r#type: "button",
+//                             onclick: move |_| {
+//                                 props.show_dialog.set(false);
+//                                 props.on_confirm.call(());
+//                             },
+//                             "{props.confirm_button_text}"
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//     }
+// }
+
+
+
+// ConfirmModal {
+//     show_dialog: show_confirm_dialog,
+//     title: "Confirm Action".to_string(),
+//     message: "Are you sure you want to reset all practice data? This action cannot be undone.".to_string(),
+//     confirm_button_text: "Yes, Reset".to_string(),
+//     on_confirm: move |_| {
+//         // The logic that was previously in the "Yes, Reset" button's onclick
+//         // show_confirm_dialog.set(false); // Modal handles this now
+//         let pool = db_pool.clone();
+//         spawn(async move {
+//             match reset_all_user_progress(&pool).await {
+//                 Ok(_) => eprintln!("database reset successfully"),
+//                 Err(e) => eprintln!("database reset failed: {}", e),
+//             }
+//         });
+//     },
+//     on_cancel: move |_| {
+//         // Optional: add any specific logic for cancellation
+//         // show_confirm_dialog.set(false); // Modal handles this now
+//         eprintln!("Reset operation cancelled.");
+//     }
+// }
