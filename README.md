@@ -27,3 +27,7 @@ This project is built with Rust and leverages the following core crates:
 - [Dioxus](https://docs.rs/dioxus/latest/dioxus/index.html): A portable, performant, and ergonomic framework for building user interfaces in Rust.
 - [SQLx](https://docs.rs/sqlx/latest/sqlx/index.html): A modern, async-ready, and type-safe SQL toolkit for Rust. Used for the local flashcard database.
 - [tts-rs](https://docs.rs/tts/latest/tts/): A cross-platform text-to-speech library that provides access to native system voices.
+
+# Acknowledgments
+
+- The vocabulary decks used in this application are sourced from the excellent [chyyran/jlpt-anki-decks](https://github.com/chyyran/jlpt-anki-decks) repository.
