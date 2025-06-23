@@ -74,43 +74,60 @@ fn App() -> Element {
             .await
     });
 
-    // put db pool in the use_context_provider if ready
-    match &*db_pool.read_unchecked() {
-        Some(Ok(pool)) => {
-            provide_context(pool.clone());
-            // use_context_provider(|| db_pool.clone());
-            eprintln!("pool is read");
-            ()
-        }
-        Some(Err(e)) => {
-             eprintln!("Error connecting to database: {e}");
-             ()
-        },
-        None => {
-            eprintln!("Connecting to database...");
-            ()
-        },
-    }
-
-
-
     rsx! {
-
         head {
             style { dangerous_inner_html: bootstrap }
             style { dangerous_inner_html: global }
         }
 
-   
-        
         // keep these for web app
         document::Link { rel: "icon", href: FAVICON }
         document::Link { rel: "stylesheet", href: BOOTSTRAP_CSS }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
-        // this is parent div, use vh-100 take 100%of viewport
-        div { class: "d-flex flex-column vh-100",
 
-            Router::<Route> {}
+        // Conditionally render based on the db_pool resource state
+        match &*db_pool.read_unchecked() {
+            Some(Ok(pool)) => {
+                // --- SUCCESS STATE ---
+                // The pool is ready. Provide it to the context and render the main app.
+                // By placing provide_context here, we guarantee the pool exists for all
+                // children of Router.
+                provide_context(pool.clone());
+                println!("Database pool ready.");
+
+                rsx! {
+                    div { class: "d-flex flex-column vh-100",
+                        // The Router is now only rendered when the pool is available
+                        Router::<Route> {}
+                    }
+                }
+            }
+            Some(Err(e)) => {
+                // --- ERROR STATE ---
+                // Render an error message if the connection failed
+                rsx! {
+                    div { class: "vh-100 d-flex justify-content-center align-items-center",
+                        div { class: "alert alert-danger", role: "alert",
+                            h4 { class: "alert-heading", "Database Connection Error" }
+                            p { "Could not connect to the database. Please check your configuration." }
+                            hr {}
+                            p { class: "mb-0", "Error: {e}" }
+                        }
+                    }
+                }
+            }
+            None => {
+                // --- LOADING STATE ---
+                // Render a loading indicator while the future is running
+                rsx! {
+                    div { class: "vh-100 d-flex justify-content-center align-items-center",
+                        div { class: "spinner-border text-primary", role: "status",
+                            span { class: "visually-hidden", "Loading..." }
+                        }
+                        p { class: "ms-3", "Connecting to database..." }
+                    }
+                }
+            }
         }
     }
 }

@@ -2,7 +2,6 @@
 
 use dioxus::prelude::*;
 use crate::db::*;
-use sqlx::sqlite::SqlitePoolOptions;
 use crate::Route;
 use tts::*;
 use crate::return_voice;

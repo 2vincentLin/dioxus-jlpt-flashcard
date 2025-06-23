@@ -6,9 +6,10 @@ use tts::*;
 use dioxus::prelude::*;
 use flashcard::{GenerateCard, DisplayCard};
 use db::*;
+use sqlx::SqlitePool;
 
 
-const HEADER_SVG: Asset = asset!("/assets/header.svg");
+//  const HEADER_SVG: Asset = asset!("/assets/header.svg");
 
 
 #[derive(Debug, Clone, Routable, PartialEq)]
@@ -123,10 +124,118 @@ pub fn Navbar() -> Element { // Encapsulating navbar in its own component is goo
 /// Home page
 #[component]
 fn Home() -> Element {
-    rsx! {
-        // you can put two components in one component
-        h1 {"This is a Japanese flash card app"}
 
+    
+    let mut words_practiced = use_signal(|| 0);
+    let mut total_practiced = use_signal(|| 0);
+    let mut familiar_words = use_signal(|| 0);
+    let mut unfamiliar_practiced = use_signal(|| 0);
+    let mut marked_words = use_signal(|| 0);
+
+    let db_pool = use_context::<SqlitePool>();
+
+    // Use another resource to fetch data, depending on db_pool
+    let _ = use_resource(move || {
+        let db_pool = db_pool.clone();
+        async move {
+            // Wait for the pool to be ready
+            let pool = db_pool.clone();
+            
+            let words_practiced1 = match count_unique_practiced_words(&pool).await {
+                Ok(count) => count,
+                Err(e) => {
+                    eprintln!("Error fetching words practiced: {}", e);
+                    0 // Default to 0 if there's an error
+                }
+            };
+            words_practiced.set(words_practiced1);
+
+            let total_practiced1 = match count_total_practiced_words(&pool).await {
+                Ok(count) => count,
+                Err(e) => {
+                    eprintln!("Error fetching total practiced words: {}", e);
+                    0 // Default to 0 if there's an error
+                }
+            };
+            total_practiced.set(total_practiced1);
+
+            let familiar_words1 = match count_total_familiar_words(&pool).await {
+                Ok(count) => count,
+                Err(e) => {
+                    eprintln!("Error fetching familiar words: {}", e);
+                    0 // Default to 0 if there's an error
+                }
+            };
+            familiar_words.set(familiar_words1);
+
+            let unfamiliar_practiced1 = match count_unfamiliar_practiced_words(&pool).await {
+                Ok(count) => count,
+                Err(e) => {
+                    eprintln!("Error fetching unfamiliar practiced words: {}", e);
+                    0 // Default to 0 if there's an error
+                }
+            };
+            unfamiliar_practiced.set(unfamiliar_practiced1);
+
+            let marked_words1 = match count_total_user_marked_words(&pool).await {
+                Ok(count) => count,
+                Err(e) => {
+                    eprintln!("Error fetching marked words: {}", e);
+                    0 // Default to 0 if there's an error
+                }
+            };
+            marked_words.set(marked_words1);
+        }
+       
+    });
+
+    
+    // In your Home component's rsx! macro
+
+    rsx! {
+        // Use a container with padding for nice spacing around the content.
+        div { class: "container p-4",
+            h1 { class: "mb-4 text-center text-light", "JLPT Flashcard Dashboard" }
+
+            // Your classes here on the card are perfect.
+            div { class: "card shadow-sm bg-dark text-light",
+                
+                // The card header will correctly be dark.
+                div { class: "card-header",
+                    h5 { class: "my-1", "Your Progress Summary" }
+                }
+                
+                ul { class: "list-group list-group-flush",
+
+                    // THE FIX: Add "bg-transparent text-light" to each list item.
+                    li { class: "list-group-item d-flex justify-content-between align-items-center bg-transparent text-light",
+                        "Words Practiced"
+                        span { class: "badge bg-info text-dark rounded-pill fs-6", "{words_practiced()}" }
+                    }
+
+                    li { class: "list-group-item d-flex justify-content-between align-items-center bg-transparent text-light",
+                        "Total Practice Times"
+                        span { class: "badge bg-info text-dark rounded-pill fs-6", "{total_practiced()}" }
+                    }
+
+                    li { class: "list-group-item d-flex justify-content-between align-items-center bg-transparent text-light",
+                        "Familiar Words"
+                        span { class: "badge bg-info text-dark rounded-pill fs-6", "{familiar_words()}" }
+                    }
+
+                    li { class: "list-group-item d-flex justify-content-between align-items-center bg-transparent text-light",
+                        "Need more practice Words"
+                        span { class: "badge bg-warning text-dark rounded-pill fs-6", "{unfamiliar_practiced()}" }
+                    }
+
+                    li { class: "list-group-item d-flex justify-content-between align-items-center bg-transparent text-light",
+                        "Marked for Review"
+                        // text-dark on this badge might be hard to read; you can remove it for better contrast.
+                        span { class: "badge bg-warning text-dark rounded-pill fs-6", "{marked_words()}" }
+                    }
+                }
+            }
+}
     }
 }
 

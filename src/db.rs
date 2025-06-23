@@ -320,7 +320,7 @@ pub async fn update_user_progress(pool: &sqlx::SqlitePool, word_id: i64, familia
 
 
 
-// todo: not yet test
+
 pub async fn reset_all_user_progress(pool: &sqlx::SqlitePool) -> Result<(), sqlx::Error> {
     // This query resets all progress fields for all words back to their default state.
     sqlx::query(
@@ -333,6 +333,72 @@ pub async fn reset_all_user_progress(pool: &sqlx::SqlitePool) -> Result<(), sqlx
 
 
 
+/// Counts the number of unique words that have been practiced (i.e., practice_time > 0).
+pub async fn count_unique_practiced_words(pool: &sqlx::SqlitePool) -> Result<i64, sqlx::Error> {
+    let count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(id)
+        FROM words
+        WHERE practice_time > 0
+        "#,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
+
+/// counts total number of words practiced by user
+pub async fn count_total_practiced_words(pool: &sqlx::SqlitePool) -> Result<i64, sqlx::Error> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT SUM(practice_time) as total FROM words"
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
+/// counts total number of familiar words by user
+pub async fn count_total_familiar_words(pool: &sqlx::SqlitePool) -> Result<i64, sqlx::Error> {
+    let count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(id)
+        FROM words
+        WHERE familiar = 1
+        "#,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
+/// counts total number of user marked words by user
+pub async fn count_total_user_marked_words(pool: &sqlx::SqlitePool) -> Result<i64, sqlx::Error> {
+    let count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(id)
+        FROM words
+        WHERE user_mark = 1
+        "#,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
+/// Counts unfamiliar words that have been practiced (i.e., practice_time > 0 and familiar = 0).
+pub async fn count_unfamiliar_practiced_words(pool: &sqlx::SqlitePool) -> Result<i64, sqlx::Error> {
+    let count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(id)
+        FROM words
+        WHERE practice_time > 0 AND familiar = 0
+        "#,
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
 
 
 
@@ -537,6 +603,43 @@ mod tests {
         println!("-> Verified: Progress updated correctly.");
     
 
+        // count unique practiced words
+        let unique_count = count_unique_practiced_words(&pool)
+            .await
+            .expect("Failed to count unique practiced words.");
+        assert_eq!(unique_count, 1);
+        println!("-> Verified: Unique practiced words count is correct: {}", unique_count);
+
+        // count total practiced words
+        let total_practiced_count = count_total_practiced_words(&pool)
+            .await
+            .expect("Failed to count total practiced words.");
+        assert_eq!(total_practiced_count, 1);
+        println!("-> Verified: Total practiced words count is correct: {}", total_practiced_count);
+
+        // count total familiar words
+        let total_familiar_count = count_total_familiar_words(&pool)
+            .await
+            .expect("Failed to count total familiar words.");
+        assert_eq!(total_familiar_count, 1);
+        println!("-> Verified: Total familiar words count is correct: {}", total_familiar_count);
+
+        // count total user marked words
+        let total_user_marked_count = count_total_user_marked_words(&pool)
+            .await
+            .expect("Failed to count total user marked words.");
+        assert_eq!(total_user_marked_count, 1);
+        println!("-> Verified: Total user marked words count is correct: {}", total_user_marked_count);
+
+        // count unfamiliar practiced words
+        let unfamiliar_practiced_count = count_unfamiliar_practiced_words(&pool)
+            .await
+            .expect("Failed to count unfamiliar practiced words.");
+        assert_eq!(unfamiliar_practiced_count, 0);
+        println!("-> Verified: Unfamiliar practiced words count is correct: {}", unfamiliar_practiced_count);
+
+
+
         // Reset progress test
         reset_all_user_progress(&pool)
             .await
@@ -549,6 +652,10 @@ mod tests {
         assert_eq!(word[0].practice_time, 0 as i64);
         assert_eq!(word[0].familiar, false);
         assert_eq!(word[0].user_mark, false);
-        println!("-> Verified: Progress reset correctly.");        
+        println!("-> Verified: Progress reset correctly.");
+
+
+
+
     }
 }
