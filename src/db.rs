@@ -1,5 +1,3 @@
-
-use sqlx::sqlite::{self, SqlitePoolOptions};
 use sqlx::{migrate::MigrateDatabase, Sqlite};
 use sqlx::Row;
 use std::error::Error;
@@ -534,6 +532,7 @@ impl ProgressUpdate {
 mod tests {
     use super::*;
     use sqlx::sqlite::SqlitePool;
+    use sqlx::sqlite::SqlitePoolOptions;
 
     /// Helper function to set up an in-memory database for testing.
     async fn setup_test_db() -> SqlitePool {

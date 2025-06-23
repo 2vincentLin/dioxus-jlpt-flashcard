@@ -10,6 +10,7 @@ edition = "2021"
 
 [dependencies]
 dioxus = { version = "0.6.0", features = ["router"] }
+futures-util = "0.3.31"
 sqlx = { version = "0.8.6", features = [ "runtime-tokio", "sqlite", "macros" ] } # For SQLite database support
 tokio =  {version = "1.45.1", features = ["full"]} # For async runtime
 

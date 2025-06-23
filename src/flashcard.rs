@@ -6,6 +6,9 @@ use crate::Route;
 use tts::*;
 use crate::return_voice;
 
+use futures_util::StreamExt;
+
+
 
 #[component]
 pub fn GenerateCard() -> Element {
@@ -21,6 +24,7 @@ pub fn GenerateCard() -> Element {
 
     let db_pool = use_context::<sqlx::SqlitePool>();
     let pool_ge = db_pool.clone();
+    let select_words = use_context::<Signal<Vec<WordRecord>>>();
 
 
 
@@ -71,7 +75,6 @@ pub fn GenerateCard() -> Element {
             }
 
             // Second Row: Checkboxes
-            // We can use a more complex grid here or just a row of columns
             div { class: "row mb-3 g-3",
                 // Grouping checkboxes for better responsiveness if needed
                 div { class: "col-md-6",
@@ -148,18 +151,25 @@ pub fn GenerateCard() -> Element {
                             // Clear any previous message
                             info_message.set(String::new());
 
-                            let pool = pool_ge.clone();
                             // We need to clone the signal to move it into the async block
+                            let pool = pool_ge.clone();
+                            let mut select_words = select_words.clone();
+                            let mut info_message = info_message.clone();
+                            let navigator = navigator.clone();
+
+                            let jlpt_lv = jlpt_lv.clone();
+                            let num = number_of_cards();
+                            let random = random_shuffle();
+                            let unfamiliar_val = !unfamiliar_only();
+                            let user_mark_val = user_mark();
 
                             async move {
                                 eprintln!("Generate Cards Clicked! ..."); // Your logging
 
-                                let mut select_words = use_context::<Signal<Vec<WordRecord>>>();
                                 let jlpt = JLPTlv::from_string(&jlpt_lv()).unwrap();
-                                let num = number_of_cards();
-                                let random = random_shuffle();
+            
 
-                                match return_words_by_user_progress(&pool, jlpt, 0, !unfamiliar_only(), user_mark(), num, random).await {
+                                match return_words_by_user_progress(&pool, jlpt, 0, unfamiliar_val, user_mark_val, num, random).await {
                                     Ok(records) => {
                                         if records.is_empty() {
                                             // Set the message and DO NOT navigate
@@ -186,6 +196,20 @@ pub fn GenerateCard() -> Element {
 
 }
 
+// Define the actions the user can perform
+#[derive(Debug, Clone, Copy)]
+enum FlashcardAction {
+    MarkFamiliar,
+    MarkUnfamiliar,
+    UserMark,
+    DisplayAnswer,
+    Pronounce,
+}
+
+
+
+
+
 #[component]
 pub fn DisplayCard(j_to_e: bool) -> Element {
     let navigator = use_navigator();
@@ -208,14 +232,15 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
 
     // --- pool for db op ---
     let db_pool = use_context::<sqlx::SqlitePool>();
-    let pool_un = db_pool.clone(); // pool for unfamiliar op
-    let pool_fa = db_pool.clone(); // pool for familiar op
-    let pool_um = db_pool.clone(); // pool for user mark op
+    let pool_action = db_pool.clone(); // pool for km_actions
+    // let pool_un = db_pool.clone(); // pool for unfamiliar op
+    // let pool_fa = db_pool.clone(); // pool for familiar op
+    // let pool_um = db_pool.clone(); // pool for user mark op
 
 
     // --- voice for tts ---
     let voice = return_voice("ja", Gender::Male)?;
-    
+
 
     // --- setup button class and icon for user_mark
     let button_class = if is_marked() {
@@ -225,8 +250,10 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
         };
     let star_icon = if is_marked() { "★" } else { "☆" }; // Solid vs. Outline star
 
+    // todo: add autofocus to the div
 
-    // 1. --- Refactored Logic: Create a reusable closure to load a card ---
+
+    // 1. --- Create a reusable closure to load a card ---
     // This closure takes the index of the card to load.
     let mut load_card = move |card_index: usize| {
         if let Some(word) = select_words.get(card_index) {
@@ -266,13 +293,151 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
         load_card(next_index); // Load the new card using the reusable logic
     };
 
-  
+
+    // 4. --- Use coroutine to handle keyboard/mouse event ---
+    // The coroutine will handle all keyboard/mouse events.
+    // We give it a name `km_actions` to send messages to it.
+    let km_actions = use_coroutine( move |mut rx: UnboundedReceiver<FlashcardAction>| {
+        // Clone all the state the logic will need into the coroutine
+        let pool = pool_action.clone();
+
+        // prepare the voice configuration   
+        let voice_to_use = voice.clone(); // Clone the voice configuration
+
+        async move {
+            // This loop waits for messages to be sent to the coroutine
+            while let Some(action) = rx.next().await {
+                let Some(word_id) = select_words.read().get(index.read().clone()).map(|w| w.id) else {
+                    eprintln!("Could not get word at current index.");
+                    continue;
+                };
+                let pool = pool.clone();
+
+                match action {
+                    FlashcardAction::MarkUnfamiliar => {
+                        eprintln!("Marking word {} as 'Needs Practice'", word_id);
+                        match ProgressUpdate::new()
+                            .increment_practice_time()
+                            .set_familiar(false)
+                            .execute(&pool, word_id)
+                            .await
+                        {
+                            Ok(_) => eprintln!("id: {:?} updated unfamiliar successfully", word_id),
+                            Err(e) => eprintln!("Background update failed: {}", e),
+                        }
+                         go_to_next_card();
+                    }
+                    FlashcardAction::MarkFamiliar => {
+                        eprintln!("Marking word {} as 'Got It!'", word_id);
+                        match ProgressUpdate::new()
+                            .increment_practice_time()
+                            .set_familiar(true)
+                            .execute(&pool, word_id)
+                            .await
+                        {
+                            Ok(_) => eprintln!("id: {:?} updated familiar successfully", word_id),
+                            Err(e) => eprintln!("Background update failed: {}", e),
+                        }
+                         go_to_next_card();
+                    }
+                    FlashcardAction::UserMark => {
+                        eprintln!("Toggling user mark for word {}", word_id);
+                        is_marked.set(!is_marked());
+                        match ProgressUpdate::new()
+                            .set_user_mark(is_marked())
+                            .execute(&pool, word_id)
+                            .await
+                        {
+                            Ok(_) => eprintln!("id: {:?} mark {:?} successfully", word_id, is_marked()),
+                            Err(e) => eprintln!("Background update failed: {}", e),
+                        }
+                    }
+                    FlashcardAction::DisplayAnswer => {
+                        eprintln!("Displaying answer for word {}", word_id);
+                        show_answer.set(true);
+                    }
+                    FlashcardAction::Pronounce => {
+                        eprintln!("Pronouncing word {}", word_id);
+
+                        let text_to_speak = reading(); // Clone the text to speak
+                        let voice_to_use = voice_to_use.clone(); // Clone the voice configuration
+                        
+                        // --- SPAWN THE THREAD ---
+                        // This moves the entire block of work to a background thread.
+                        std::thread::spawn(move || {
+                            // This code now runs in the background.
+                            match Tts::default() {
+                                Ok(mut tts) => {
+                                    // It's good practice to log from the thread to see it's working
+                                    eprintln!("[Thread] TTS initialized, setting voice...");
+                                    eprintln!("[Thread] Using voice: {:?}", voice_to_use);
+                                    eprintln!("[Thread] Text to speak: {}", text_to_speak);
+
+                                    if tts.set_voice(&voice_to_use).is_err() {
+                                        eprintln!("[Thread] Error: Failed to set voice.");
+                                    }
+
+                                    // Start the non-blocking speech
+                                    let _ = tts.speak(text_to_speak, false);
+
+                                    // *** THE KEY ***
+                                    // Sleep on the BACKGROUND thread. This keeps the `tts` object
+                                    // alive so it can finish speaking, but it does NOT block the UI.
+                                    // Adjust the duration if your text is longer.
+                                    std::thread::sleep(std::time::Duration::from_secs(5));
+
+                                    eprintln!("[Thread] Sleep finished, thread is ending.");
+                                },
+                                Err(e) => {
+                                    eprintln!("[Thread] Error: {}", e);
+                                }
+                            }
+                        });
+                    }
+                }
+
+                
+               
+            }
+        }
+    });
 
 
     rsx! {
         
 
-        div { class: "container h-100 d-flex flex-column",
+        div { 
+            class: "container h-100 d-flex flex-column",
+            // Add the onkeydown listener to this wrapping div
+            tabindex: "0", // <-- Make it focusable!
+            onkeydown: move |event: KeyboardEvent| {
+                match event.key() {
+                    // Check for 'n' or 'N'
+                    Key::Character(s) if s.eq_ignore_ascii_case("n") => {
+                        eprintln!("n key pressed, marking as unfamiliar");
+                        km_actions.send(FlashcardAction::MarkUnfamiliar);
+                    },
+                    // Add a key for the second button, e.g., 'G' for "Got it!"
+                    Key::Character(s) if s.eq_ignore_ascii_case("g") => {
+                        eprintln!("g key pressed, marking as familiar");
+                        km_actions.send(FlashcardAction::MarkFamiliar);
+                    },
+                    Key::Character(s) if s.eq_ignore_ascii_case("m") => {
+                        eprintln!("m key pressed, toggling user mark");
+                        km_actions.send(FlashcardAction::UserMark);
+                    },
+                    Key::Character(s) if s.eq_ignore_ascii_case("s") => {
+                        eprintln!("s key pressed, displaying answer");
+                        km_actions.send(FlashcardAction::DisplayAnswer);
+                    },
+                    Key::Character(s) if s.eq_ignore_ascii_case("p") => {
+                        eprintln!("p key pressed, pronouncing word");
+                        km_actions.send(FlashcardAction::Pronounce);
+                    },
+                    // Ignore any other key presses
+                    _ => {}
+                }
+            },
             // --- Top Controls ---
             div { class: "row my-3",
                 div { class: "col-auto",
@@ -309,28 +474,8 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                     button { 
                         class: button_class, 
 
-                        onclick: move |_| {
-                            let pool = pool_um.clone();
-                            let word_id = select_words.get(index()).unwrap().id;
-                            eprintln!("word_id: {}", word_id);
-                            
-                            async move {
-
-                                match ProgressUpdate::new()
-                                    .set_user_mark(!is_marked())
-                                    .execute(&pool, word_id)
-                                    .await {
-                                        Ok(_) => {
-                                            eprintln!("id {:?} marked {:?} successfully", word_id, !is_marked());
-                                        }
-                                        Err(e) => {
-                                            eprintln!("Background update failed: {}", e);
-                                        }, 
-                                    }
-                                is_marked.set(!is_marked());
-                            }
-                            
-                        },
+                        onclick: move |_| km_actions.send(FlashcardAction::UserMark),
+                                                    
                         {star_icon}
                     }
                 }
@@ -339,53 +484,18 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                     div { class: "col d-flex justify-content-between align-items-center",
                         p { class: "lead my-3", "{reading()}" }
                         button { class: "btn btn-light",
-                            onclick: move |_| {
-                            // --- PREPARE DATA ---
-                            // Clone the data that the new thread will need before we create it.
-                            let text_to_speak = reading();
-                            let voice_to_use = voice.clone(); // Clone the voice configuration
-
-                            // --- SPAWN THE THREAD ---
-                            // This moves the entire block of work to a background thread.
-                            std::thread::spawn(move || {
-                                // This code now runs in the background.
-                                match Tts::default() {
-                                    Ok(mut tts) => {
-                                        // It's good practice to log from the thread to see it's working
-                                        eprintln!("[Thread] TTS initialized, setting voice...");
-
-                                        if tts.set_voice(&voice_to_use).is_err() {
-                                            eprintln!("[Thread] Error: Failed to set voice.");
-                                        }
-
-                                        // Start the non-blocking speech
-                                        let _ = tts.speak(text_to_speak, false);
-
-                                        // *** THE KEY ***
-                                        // Sleep on the BACKGROUND thread. This keeps the `tts` object
-                                        // alive so it can finish speaking, but it does NOT block the UI.
-                                        // Adjust the duration if your text is longer.
-                                        std::thread::sleep(std::time::Duration::from_secs(5));
-
-                                        eprintln!("[Thread] Sleep finished, thread is ending.");
-                                    },
-                                    Err(e) => {
-                                        eprintln!("[Thread] Error: {}", e);
-                                    }
-                                }
-                            });
-                        }
-                            , "🔊"}
+                            onclick: move |_| km_actions.send(FlashcardAction::Pronounce),
+                            "🔊"}
                         }
                     }
                 
 
                 div { class: "col",
-                    onclick: move |_| show_answer.set(true),
+                    onclick: move |_| km_actions.send(FlashcardAction::DisplayAnswer),
                     if show_answer() {
                         h3 { class: "display-5 text-success", "{answer()}" }
                     } else {
-                        div { class: "alert alert-info", "Click to show answer" }
+                        div { class: "alert alert-info", "Click to ", u {"s"} , "how answer" }
                     }
                 }
             }
@@ -413,60 +523,16 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
 
             // --- Bottom Controls ---
             div { class: "row my-3",
+                
                 div { class: "col",
                     button { class: "btn btn-warning w-100", 
-                    onclick: move |_| {
-                        let pool = pool_un.clone();
-                        let word_id = select_words.get(index()).unwrap().id;
-                        eprintln!("word_id: {}", word_id);
-                        
-                        // in normal rust, async move won't be executed unless you call await, or use spawn in Dioxus
-                        spawn (async move {
-                            match ProgressUpdate::new()
-                                .increment_practice_time()
-                                .set_familiar(false)
-                                .execute(&pool, word_id)
-                                .await {
-                                    Ok(_) => {
-                                        eprintln!("id {:?} for unfamiliar updated successfully", word_id);
-                                    }
-                                    Err(e) => {
-                                        eprintln!("Background update failed: {}", e);
-                                    }, 
-                                }
-
-                            go_to_next_card();
-                        });
-                    }, 
-                    "Need more practice" }
+                    onclick: move |_| km_actions.send(FlashcardAction::MarkUnfamiliar),
+                    u {"N"}, "eed more practice" }
                 }
                 div { class: "col",
                     button { class: "btn btn-success w-100", 
-                    onclick: move |_| {
-                        let pool = pool_fa.clone();
-                        let word_id = select_words.get(index()).unwrap().id;
-                        eprintln!("word_id: {}", word_id);
-                        
-                        // but in Dioxus 6.0, they add new function to auto spawn
-                        async move {
-                            match ProgressUpdate::new()
-                                .increment_practice_time()
-                                .set_familiar(true)
-                                .execute(&pool, word_id)
-                                .await {
-                                    Ok(_) => {
-                                        eprintln!("id {:?} for familiar updated successfully", word_id);
-                                    }
-                                    Err(e) => {
-                                        eprintln!("Background update failed: {}", e);
-                                    }, 
-                                }
-
-
-                            go_to_next_card();
-                        }
-                    },
-                    "Got it!" }
+                    onclick: move |_| km_actions.send(FlashcardAction::MarkFamiliar),                 
+                    u {"G"}, "ot it!" }
                 }
             }
         }
