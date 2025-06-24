@@ -409,7 +409,16 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
         div { 
             class: "container h-100 d-flex flex-column",
             // Add the onkeydown listener to this wrapping div
+
+            // --- Make the div focusable ---
             tabindex: "0", // <-- Make it focusable!
+            onmounted: move |evt| {
+                // Focus the div when mounted to capture key events
+                let element = evt.data();
+                spawn(async move {
+                    let _ = element.set_focus(true).await;
+                });
+            },
             onkeydown: move |event: KeyboardEvent| {
                 match event.key() {
                     // Check for 'n' or 'N'
@@ -438,6 +447,7 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                     _ => {}
                 }
             },
+
             // --- Top Controls ---
             div { class: "row my-3",
                 div { class: "col-auto",
