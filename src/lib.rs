@@ -1,10 +1,12 @@
 pub mod db;
 pub mod flashcard;
+pub mod wordlist;
 
 use tts::*;
 
 use dioxus::prelude::*;
 use flashcard::{GenerateCard, DisplayCard};
+use wordlist::{WordListPage, WordListType};
 use db::*;
 use sqlx::SqlitePool;
 
@@ -22,6 +24,8 @@ pub enum Route {
     GenerateCard {},
     #[route("/diaplay/:j_to_e")]
     DisplayCard { j_to_e: bool},
+    #[route("/word-list/:list_type")]
+    WordListPage { list_type: WordListType },
     #[route("/setting")]
     Setting {},
 
@@ -189,8 +193,7 @@ fn Home() -> Element {
        
     });
 
-    
-    // In your Home component's rsx! macro
+     
 
     rsx! {
         // Use a container with padding for nice spacing around the content.
@@ -207,30 +210,40 @@ fn Home() -> Element {
                 
                 ul { class: "list-group list-group-flush",
 
-                    // THE FIX: Add "bg-transparent text-light" to each list item.
-                    li { class: "list-group-item d-flex justify-content-between align-items-center bg-transparent text-light",
-                        "Words Practiced"
-                        span { class: "badge bg-info text-dark rounded-pill fs-6", "{words_practiced()}" }
-                    }
 
                     li { class: "list-group-item d-flex justify-content-between align-items-center bg-transparent text-light",
                         "Total Practice Times"
                         span { class: "badge bg-info text-dark rounded-pill fs-6", "{total_practiced()}" }
                     }
 
-                    li { class: "list-group-item d-flex justify-content-between align-items-center bg-transparent text-light",
+                    Link {
+                        // The `to` prop takes the Route variant we want to navigate to
+                        to: Route::WordListPage { list_type: WordListType::Practiced },
+                        class: "list-group-item list-group-item-action d-flex justify-content-between align-items-center bg-transparent text-light",
+                        "Words Practiced"
+                        span { class: "badge bg-info text-dark rounded-pill fs-6", "{words_practiced()}" }
+                    }
+                    
+                    Link {
+                        // The `to` prop takes the Route variant we want to navigate to
+                        to: Route::WordListPage { list_type: WordListType::Familiar },
+                        class: "list-group-item list-group-item-action d-flex justify-content-between align-items-center bg-transparent text-light",
                         "Familiar Words"
                         span { class: "badge bg-info text-dark rounded-pill fs-6", "{familiar_words()}" }
                     }
 
-                    li { class: "list-group-item d-flex justify-content-between align-items-center bg-transparent text-light",
+                    Link {
+                        to: Route::WordListPage { list_type: WordListType::Unfamiliar },
+                        class: "list-group-item list-group-item-action d-flex justify-content-between align-items-center bg-transparent text-light",
                         "Need more practice Words"
                         span { class: "badge bg-warning text-dark rounded-pill fs-6", "{unfamiliar_practiced()}" }
                     }
 
-                    li { class: "list-group-item d-flex justify-content-between align-items-center bg-transparent text-light",
+  
+                    Link {
+                        to: Route::WordListPage { list_type: WordListType::Marked },
+                        class: "list-group-item list-group-item-action d-flex justify-content-between align-items-center bg-transparent text-light",
                         "Marked for Review"
-                        // text-dark on this badge might be hard to read; you can remove it for better contrast.
                         span { class: "badge bg-warning text-dark rounded-pill fs-6", "{marked_words()}" }
                     }
                 }

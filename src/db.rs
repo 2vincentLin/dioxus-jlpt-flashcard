@@ -20,7 +20,7 @@ pub enum WordField {
     UserMark,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum JLPTlv {
     N1,
     N2,
@@ -522,8 +522,89 @@ impl ProgressUpdate {
 }
 
 
+#[derive(Default)]
+pub struct ProgressSelect {
+    jlpt: Option<JLPTlv>,
+    practice_time: Option<i64>,
+    familiar: Option<bool>,
+    user_mark: Option<bool>,
+}
 
+impl ProgressSelect {
+    pub fn new() -> Self {
+        Self::default()
+    }
 
+    pub fn select_jlpt(mut self, jlpt: JLPTlv) -> Self {
+        self.jlpt = Some(jlpt);
+        self
+    }
+
+    pub fn select_practice_time(mut self, time: i64) -> Self {
+        self.practice_time = Some(time);
+        self
+    }
+
+    pub fn select_familiar(mut self, value: bool) -> Self {
+        self.familiar = Some(value);
+        self
+    }
+
+    pub fn select_user_mark(mut self, value: bool) -> Self {
+        self.user_mark = Some(value);
+        self
+    }
+
+    pub async fn execute(self, pool: &sqlx::SqlitePool) -> Result<Vec<WordRecord>, sqlx::Error> {
+        let mut query = String::from("SELECT * FROM words WHERE 1=1");
+        
+        if let Some(jlpt) = self.jlpt {
+            query.push_str(" AND jlpt = ?");
+        }
+        if let Some(practic_time) = self.practice_time {
+            query.push_str(" AND practice_time >= ?");
+        }
+        if let Some(familiar) = self.familiar {
+            query.push_str(" AND familiar = ?");
+        }
+        if let Some(user_mark) = self.user_mark {
+            query.push_str(" AND user_mark = ?");
+        }
+
+        let mut sql_query = sqlx::query(&query);
+        
+        if let Some(jlpt) = self.jlpt {
+            sql_query = sql_query.bind(jlpt.to_string());
+        }
+        if let Some(practice_time) = self.practice_time {
+            sql_query = sql_query.bind(practice_time);
+        }
+        if let Some(familiar) = self.familiar {
+            sql_query = sql_query.bind(familiar);
+        }
+        if let Some(user_mark) = self.user_mark {
+            sql_query = sql_query.bind(user_mark);
+        }
+
+        let rows = sql_query.fetch_all(pool).await?;
+
+        // Map the rows to WordRecord
+        let records: Vec<WordRecord> = rows.into_iter().map(|row| WordRecord {
+            id: row.get("id"),
+            expression: row.get("expression"),
+            reading: row.get("reading"),
+            meaning: row.get("meaning"),
+            jlpt: row.get("jlpt"),
+            practice_time: row.get("practice_time"),
+            familiar: row.get("familiar"),
+            user_mark: row.get("user_mark"),
+        }).collect();
+
+        Ok(records)
+    }
+
+    
+}
 
 
 
@@ -637,7 +718,29 @@ mod tests {
         assert_eq!(unfamiliar_practiced_count, 0);
         println!("-> Verified: Unfamiliar practiced words count is correct: {}", unfamiliar_practiced_count);
 
+        // check ProgressSelect
+        let select_result = ProgressSelect::new()
+            .select_jlpt(JLPTlv::N5)
+            .select_familiar(true)
+            .select_user_mark(true)
+            .execute(&pool)
+            .await
+            .expect("Failed to execute progress select.");
+        assert_eq!(select_result.len(), 1);
+        assert_eq!(select_result[0].id, 2);
+        assert_eq!(select_result[0].expression, "二");
+        assert_eq!(select_result[0].familiar, true);
+        assert_eq!(select_result[0].user_mark, true);
+        println!("-> Verified: ProgressSelect returned correct results.");
 
+
+        let select_result = ProgressSelect::new()
+            .select_practice_time(1)
+            .execute(&pool)
+            .await
+            .expect("Failed to execute progress select for N1.");
+        assert_eq!(select_result.len(), 1);
+        println!("-> Verified: ProgressSelect returned correct results for practice time.");
 
         // Reset progress test
         reset_all_user_progress(&pool)
