@@ -1,6 +1,7 @@
 pub mod db;
 pub mod flashcard;
 pub mod wordlist;
+pub mod footer;
 
 use tts::*;
 
@@ -9,9 +10,6 @@ use flashcard::{GenerateCard, DisplayCard};
 use wordlist::{WordListPage, WordListType};
 use db::*;
 use sqlx::SqlitePool;
-
-
-//  const HEADER_SVG: Asset = asset!("/assets/header.svg");
 
 
 #[derive(Debug, Clone, Routable, PartialEq)]
@@ -58,8 +56,8 @@ pub fn Navbar() -> Element { // Encapsulating navbar in its own component is goo
                 button {
                     class: "navbar-toggler",
                     r#type: "button",
-                    // "data-bs-toggle": "collapse", // Removed: Bootstrap JS hook
-                    // "data-bs-target": "#navbarNavDropdown", // Removed: Points to the ID of the collapsible content
+                    // "data-bs-toggle": "collapse", 
+                    // "data-bs-target": "#navbarNavDropdown",
                     "aria-controls": "navbarNavDropdown", // Still good for accessibility
                     "aria-expanded": "{is_nav_open}", // Reflects state for accessibility
                     "aria-label": "Toggle navigation",
@@ -125,11 +123,11 @@ pub fn Navbar() -> Element { // Encapsulating navbar in its own component is goo
 
 
 
-/// Home page
+/// Home page will display the user's progress summary.
 #[component]
 fn Home() -> Element {
 
-    
+    // Signals to hold the counts of various word categories
     let mut words_practiced = use_signal(|| 0);
     let mut total_practiced = use_signal(|| 0);
     let mut familiar_words = use_signal(|| 0);
@@ -265,8 +263,7 @@ fn Setting() -> Element {
             div { class: "d-flex justify-content-between align-items-center my-3",
                 h3 { class: "mb-0", "Reset your practice record" }
 
-                // 2. This button NO LONGER calls the database directly.
-                //    It now just shows the confirmation dialog.
+                // button to shows the confirmation dialog.
                 button {
                     class: "btn btn-danger", // Changed to red for a destructive action
                     onclick: move |_| {
@@ -277,8 +274,8 @@ fn Setting() -> Element {
             }
         }
 
-        // 3. Conditionally render the modal based on the signal's value.
-        //    This part will only appear when `show_confirm_dialog` is true.
+        
+        //  This part will only appear when `show_confirm_dialog` is true.
         if show_confirm_dialog() {
             // Modal backdrop
             div {
@@ -333,7 +330,7 @@ fn Setting() -> Element {
 
 
 
-// this function returns a tts voice based on lang and Geneder enum in tts crate
+/// this function returns a tts voice based on lang and Geneder enum in tts crate
 pub fn return_voice(lang: &str, gender: Gender) -> Result<Voice, Error> {
     let tts = Tts::default()?;
 

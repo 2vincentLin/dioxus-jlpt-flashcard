@@ -14,6 +14,7 @@ use std::time::Duration;
 use dxgui::Route;
 use dxgui::db::WordRecord;
 use dxgui::db::DB_URL;
+use dxgui::footer::{Footer, StatusLevel, StatusMessage};
 
 
 
@@ -40,25 +41,31 @@ fn main() {
 
     // Launch app from cfg
     LaunchBuilder::desktop().with_cfg(cfg).launch(App);
-
-    
     
 }
 
+
+
+
 #[component]
 fn App() -> Element {
-    let shared_text = use_signal(|| "".to_string());
     // this will be used in flashcard to hold the retrieved data
     let select_words = use_signal(|| Vec::<WordRecord>::new());
-
-    provide_context(shared_text.clone()); // now available to all children
     provide_context(select_words.clone());
+
+    // This will be used to hold the status message and level
+    // The default message is empty, and the level is Info.
+    let mut status_signal = use_signal(|| StatusMessage {
+        message: String::new(),
+        level: StatusLevel::Info,
+    });
+    // Provide the status signal to the context so it can be consumed by Footer
+    provide_context(status_signal.clone());
 
     // Include the Bootstrap and global stylesheets
     let bootstrap = include_str!("../assets/bootstrap.min.css");
     let global= include_str!("../assets/main.css");
     // let header_svg = include_str!("../assets/header.svg");
-
 
     // initiate db pool for all children component
     let db_pool = use_resource(move || async move {
@@ -95,11 +102,27 @@ fn App() -> Element {
                 provide_context(pool.clone());
                 println!("Database pool ready.");
 
+
+                // Set the initial status message to indicate the app is ready
+                status_signal.set(StatusMessage {
+                    message: "App is ready".to_string(),
+                    level: StatusLevel::Success,
+                });
+
                 rsx! {
                     div { class: "d-flex flex-column vh-100",
                         // The Router is now only rendered when the pool is available
                         Router::<Route> {}
+
+                        // Footer with status message
+                        // div {
+                        //     class: "bg-dark text-white p-2 small mt-auto",
+                        //     "Status: All systems operational"
+                        // }
+                        Footer {}
                     }
+
+                    
                 }
             }
             Some(Err(e)) => {

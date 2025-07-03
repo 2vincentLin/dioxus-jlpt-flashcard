@@ -1,12 +1,12 @@
 use dioxus::prelude::*;
-use sqlx::SqlitePool;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str::FromStr;
 use std::error::Error;
 use crate::db::*;
 use crate::Route;
 
-// for 2nd route enum, we cannot derive Routable, it'll conflict with the first one.
+/// Represents the type of word list to display.
+/// This enum is used to determine which set of words to fetch from the database.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum WordListType {
     Practiced,
@@ -31,7 +31,6 @@ impl Display for WordListType {
 // A simple error type for our FromStr implementation
 #[derive(Debug)]
 pub struct ParseWordListTypeError;
-
 
 // 1. Implement Display for the error type.
 //    This tells Rust how to format the error as a user-facing string.
@@ -61,6 +60,7 @@ impl FromStr for WordListType {
     }
 }
 
+/// A component that displays a list of words based on the specified `WordListType`.
 #[component]
 pub fn WordListPage(list_type: WordListType) -> Element {
     
@@ -89,6 +89,7 @@ pub fn WordListPage(list_type: WordListType) -> Element {
                 WordListType::Unfamiliar => {
                     ProgressSelect::new()
                         .select_familiar(false)
+                        .select_practice_time(1)
                         .execute(&pool)
                         .await
                         .map_err(|e| e.to_string())
@@ -118,8 +119,7 @@ pub fn WordListPage(list_type: WordListType) -> Element {
             }
             h1 { "{title}" }
             
-            // Render based on the state of our resource
-            
+            // Render based on the state of our resource            
             match &*word_list.read_unchecked() {
                 Some(Ok(words)) => rsx! {
                     table { class: "table table-dark table-striped",

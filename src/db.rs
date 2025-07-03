@@ -20,6 +20,24 @@ pub enum WordField {
     UserMark,
 }
 
+impl WordField {
+    pub fn to_string(&self) -> String {
+        match self {
+            WordField::Id => "id".to_string(),
+            WordField::Expression => "expression".to_string(),
+            WordField::Reading => "reading".to_string(),
+            WordField::Meaning => "meaning".to_string(),
+            WordField::JLPT(jlptlv) => { 
+                jlptlv.to_string()
+               }
+            WordField::PracticeTime => "practice_time".to_string(),
+            WordField::Familiar => "familiar".to_string(),
+            WordField::UserMark => "user_mark".to_string(),
+    
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum JLPTlv {
     N1,
@@ -51,41 +69,8 @@ impl JLPTlv {
     }
 }
 
-pub enum FamiliarityField {
-    Id,
-    PracticeTime,
-    Familiar,
-    UserMark,
-}
 
-impl FamiliarityField {
-    pub fn to_string(&self) -> String {
-        match self {
-            FamiliarityField::Id => "id".to_string(),
-            FamiliarityField::PracticeTime => "practice_time".to_string(),
-            FamiliarityField::Familiar => "familiar".to_string(),
-            FamiliarityField::UserMark => "user_mark".to_string(),
-        }
-    }
-}
 
-impl WordField {
-    pub fn to_string(&self) -> String {
-        match self {
-            WordField::Id => "id".to_string(),
-            WordField::Expression => "expression".to_string(),
-            WordField::Reading => "reading".to_string(),
-            WordField::Meaning => "meaning".to_string(),
-            WordField::JLPT(jlptlv) => { 
-                jlptlv.to_string()
-               }
-            WordField::PracticeTime => "practice_time".to_string(),
-            WordField::Familiar => "familiar".to_string(),
-            WordField::UserMark => "user_mark".to_string(),
-    
-        }
-    }
-}
 
 
 #[derive(Debug, Clone)]
@@ -195,7 +180,7 @@ pub async fn bulk_insert_words(pool: &sqlx::SqlitePool, records: Vec<WordRecord>
     transaction.commit().await?;
     Ok(())
 }
-
+/// Finds a word by its field and value, returning a vector of IDs.
 pub async fn find_word_ids(pool: &sqlx::SqlitePool, field: WordField, value: &str) -> Result<Vec<i64>, sqlx::Error> {
     
     let query = match field {
@@ -216,6 +201,7 @@ pub async fn find_word_ids(pool: &sqlx::SqlitePool, field: WordField, value: &st
 
 }
 
+/// Finds a word by its ID and returns a vector of WordRecord.
 pub async fn find_word_by_ids(pool: &sqlx::SqlitePool, ids: Vec<i64>) -> Result<Vec<WordRecord>, sqlx::Error> {
     let mut records = Vec::new();
     for id in ids {
@@ -239,7 +225,8 @@ pub async fn find_word_by_ids(pool: &sqlx::SqlitePool, ids: Vec<i64>) -> Result<
     Ok(records)
 }
 
-
+/// Returns a vector of WordRecord based on user progress criteria.
+/// do not use this, use ProgressSelect instead
 pub async fn return_words_by_user_progress(
     pool: &sqlx::SqlitePool, 
     jlpt: JLPTlv,
@@ -302,8 +289,8 @@ pub async fn return_words_by_user_progress(
 
 
 
-
-// do not use this, use ProgressUpdate instead
+/// Updates the user's progress for a specific word.
+/// do not use this, use ProgressUpdate instead
 pub async fn update_user_progress(pool: &sqlx::SqlitePool, word_id: i64, familiar: bool, user_mark: bool) -> Result<(), sqlx::Error> {
 
     sqlx::query("UPDATE words SET practice_time = practice_time + 1, familiar = ?, user_mark = ? WHERE id = ?")
@@ -318,7 +305,8 @@ pub async fn update_user_progress(pool: &sqlx::SqlitePool, word_id: i64, familia
 
 
 
-
+/// Resets all user progress fields for all words in the database.
+/// This function sets `practice_time`, `familiar`, and `user_mark` back to their default values (0 or false).
 pub async fn reset_all_user_progress(pool: &sqlx::SqlitePool) -> Result<(), sqlx::Error> {
     // This query resets all progress fields for all words back to their default state.
     sqlx::query(
@@ -452,7 +440,7 @@ pub async fn insert_words(pool: &sqlx::SqlitePool, records: Vec<WordRecord>) -> 
 
 
 
-// This struct defines the changes we might want to make.
+/// This struct defines the changes we might want to make.
 #[derive(Default)]
 pub struct ProgressUpdate {
     increment_practice: bool,
@@ -461,24 +449,24 @@ pub struct ProgressUpdate {
 }
 
 impl ProgressUpdate {
-    // Start with a new, empty update operation.
+    /// Start with a new, empty update operation.
     pub fn new() -> Self {
         Self::default()
     }
 
-    // Chainable method to set the 'familiar' status.
+    /// Chainable method to set the 'familiar' status.
     pub fn set_familiar(mut self, value: bool) -> Self {
         self.familiar = Some(value);
         self
     }
 
-    // Chainable method to set the 'user_mark' status.
+    /// Chainable method to set the 'user_mark' status.
     pub fn set_user_mark(mut self, value: bool) -> Self {
         self.user_mark = Some(value);
         self
     }
     
-    // Chainable method to indicate we should increment the practice time.
+    /// Chainable method to indicate we should increment the practice time.
     pub fn increment_practice_time(mut self) -> Self {
         self.increment_practice = true;
         self
@@ -521,7 +509,7 @@ impl ProgressUpdate {
 
 }
 
-
+/// This struct is used to select words based on user progress criteria.
 #[derive(Default)]
 pub struct ProgressSelect {
     jlpt: Option<JLPTlv>,
@@ -531,43 +519,44 @@ pub struct ProgressSelect {
 }
 
 impl ProgressSelect {
+    /// Start with a new, empty selection operation.
     pub fn new() -> Self {
         Self::default()
     }
-
+    /// Chainable method to select words by JLPT level.
     pub fn select_jlpt(mut self, jlpt: JLPTlv) -> Self {
         self.jlpt = Some(jlpt);
         self
     }
-
+    /// Chainable method to select words by practice time.
     pub fn select_practice_time(mut self, time: i64) -> Self {
         self.practice_time = Some(time);
         self
     }
-
+    /// Chainable method to select words by familiarity.
     pub fn select_familiar(mut self, value: bool) -> Self {
         self.familiar = Some(value);
         self
     }
-
+    /// Chainable method to select words by user mark.
     pub fn select_user_mark(mut self, value: bool) -> Self {
         self.user_mark = Some(value);
         self
     }
-
+    /// Executes the selection operation against the database.
     pub async fn execute(self, pool: &sqlx::SqlitePool) -> Result<Vec<WordRecord>, sqlx::Error> {
         let mut query = String::from("SELECT * FROM words WHERE 1=1");
         
-        if let Some(jlpt) = self.jlpt {
+        if let Some(_jlpt) = self.jlpt {
             query.push_str(" AND jlpt = ?");
         }
-        if let Some(practic_time) = self.practice_time {
+        if let Some(_practic_time) = self.practice_time {
             query.push_str(" AND practice_time >= ?");
         }
-        if let Some(familiar) = self.familiar {
+        if let Some(_familiar) = self.familiar {
             query.push_str(" AND familiar = ?");
         }
-        if let Some(user_mark) = self.user_mark {
+        if let Some(_user_mark) = self.user_mark {
             query.push_str(" AND user_mark = ?");
         }
 

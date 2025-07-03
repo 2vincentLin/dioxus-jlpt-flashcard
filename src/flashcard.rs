@@ -2,6 +2,7 @@
 
 use dioxus::prelude::*;
 use crate::db::*;
+use crate::footer::{StatusMessage, StatusLevel};
 use crate::Route;
 use tts::*;
 use crate::return_voice;
@@ -9,7 +10,7 @@ use crate::return_voice;
 use futures_util::StreamExt;
 
 
-
+/// This is the main flashcard generation component
 #[component]
 pub fn GenerateCard() -> Element {
 
@@ -19,8 +20,11 @@ pub fn GenerateCard() -> Element {
     let mut unfamiliar_only = use_signal(|| true);
     let mut random_shuffle = use_signal(|| true);
     let mut user_mark = use_signal(|| false);
-    let mut info_message = use_signal(|| String::new());
+    
     let navigator = use_navigator();
+
+    // This is the info message that will be displayed in the button row
+    let mut status_message = use_context::<Signal<StatusMessage>>();
 
     let db_pool = use_context::<sqlx::SqlitePool>();
     let pool_ge = db_pool.clone();
@@ -127,34 +131,22 @@ pub fn GenerateCard() -> Element {
                 }
             }
 
-            // Button Row (or part of the second row)
+            // Button Row 
             div { 
-                // 1. Use flexbox to align items.
                 //    `justify-content-end` pushes everything to the right.
                 //    `align-items-center` vertically centers the message and button.
                 class: "row d-flex justify-content-end align-items-center",
                 
-                // 2. The new message block. It's inside the flex row.
-                div { class: "col-auto", // `col-auto` makes it only as wide as its content
-                    if !info_message().is_empty() {
-                        // Display the message with some margin on the right (me-3)
-                        p { class: "alert alert-warning text-center mb-0 me-3", "{info_message}" }
-                    }
-                }
-                
+
                 // 3. The button block, also using `col-auto`.
                 div { class: "col-auto",
                     button {
                         class: "btn btn-primary btn-lg",
                         r#type: "button",
                         onclick: move |_| {
-                            // Clear any previous message
-                            info_message.set(String::new());
-
                             // We need to clone the signal to move it into the async block
                             let pool = pool_ge.clone();
                             let mut select_words = select_words.clone();
-                            let mut info_message = info_message.clone();
                             let navigator = navigator.clone();
 
                             let jlpt_lv = jlpt_lv.clone();
@@ -173,16 +165,27 @@ pub fn GenerateCard() -> Element {
                                     Ok(records) => {
                                         if records.is_empty() {
                                             // Set the message and DO NOT navigate
-                                            info_message.set("No cards found for these settings.".to_string());
+                                            status_message.set(StatusMessage {
+                                                message: "No cards found for these settings.".to_string(),
+                                                level: StatusLevel::Warning,
+                                            });
                                         } else {
                                             // Load records and navigate
                                             select_words.set(records);
+                                            status_message.set(StatusMessage {
+                                                message: format!("{} cards loaded successfully", select_words().len()),
+                                                level: StatusLevel::Success,
+                                            });
                                             navigator.push(Route::DisplayCard { j_to_e: j_to_e() });
                                         }
                                     },
                                     Err(e) => {
                                         eprintln!("Error fetching word IDs: {}", e);
-                                        info_message.set("A database error occurred.".to_string());
+                                        status_message.set(StatusMessage {
+                                            message: "A database error occurred.".to_string(),
+                                            level: StatusLevel::Error,
+                                        });
+                                        
                                     }
                                 }
                             }
@@ -196,7 +199,7 @@ pub fn GenerateCard() -> Element {
 
 }
 
-// Define the actions the user can perform
+/// Define the actions the user can perform
 #[derive(Debug, Clone, Copy)]
 enum FlashcardAction {
     MarkFamiliar,
@@ -209,13 +212,14 @@ enum FlashcardAction {
 
 
 
-
+/// This component displays a flashcard with a question, reading, and answer.
 #[component]
 pub fn DisplayCard(j_to_e: bool) -> Element {
     let navigator = use_navigator();
     let mut index = use_signal(|| 0 as usize); // current index in select_words
     let select_words = use_context::<Signal<Vec<WordRecord>>>();
     let total_cards = select_words.len();
+    let mut status_message = use_context::<Signal<StatusMessage>>();
     
 
      // --- Signals for UI State ---
@@ -286,6 +290,10 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
         let next_index = if current_index < total_cards - 1 {
             current_index + 1
         } else {
+            status_message.set(StatusMessage {
+                message: "End of cards, looping back to the start.".to_string(),
+                level: StatusLevel::Info,
+            });
             0 // Loop back to the start
         };
 
@@ -407,7 +415,7 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
         
 
         div { 
-            class: "container h-100 d-flex flex-column",
+            class: "container h-75 d-flex flex-column",
             // Add the onkeydown listener to this wrapping div
 
             // --- Make the div focusable ---
