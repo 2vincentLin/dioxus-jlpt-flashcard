@@ -21,7 +21,6 @@ pub fn GnerateTestCard() -> Element {
 
     let navigator = use_navigator();
     let mut number_of_cards = use_signal(|| 15);
-    let select_words = use_context::<Signal<Vec<WordRecord>>>();
 
 
     let mut j_to_e= use_signal(|| true);
@@ -29,7 +28,7 @@ pub fn GnerateTestCard() -> Element {
 
     // let db_pool = use_context::<sqlx::SqlitePool>();
     // let pool_ge = db_pool.clone();
-    let select_words = use_context::<Signal<Vec<WordRecord>>>();
+    let mut select_words = use_context::<Signal<Vec<WordRecord>>>();
 
 
     rsx!(
@@ -98,27 +97,22 @@ pub fn GnerateTestCard() -> Element {
                         r#type: "button",
                         onclick: move |_| {
                             
-                            let mut select_words = select_words.clone();
-                            let navigator = navigator.clone();
 
-                            let num = number_of_cards();
-
-                            let j_to_e = j_to_e();
-
+                            // randomly select words from the select_words context
                             let mut rng = rng();
-                            let mut words = select_words.read().clone();
+                            let mut words = select_words();
                             words.shuffle(&mut rng);
-                            let selected: Vec<WordRecord> = words.into_iter().take(num).collect();
+                            let selected: Vec<WordRecord> = words.into_iter().take(number_of_cards()).collect();
                             select_words.set(selected);
 
                             eprintln!("Selected {} words for test cards", select_words.len());
-                            eprintln!("the cards picked are: {:?}", select_words.read());
+                            // eprintln!("the cards picked are: {:?}", select_words.read());
 
                             status_message.set(StatusMessage {
                                 message: "Generating test cards successfully".to_string(),
                                 level: StatusLevel::Info,
                             });
-                            navigator.push(Route::TestCard { j_to_e });
+                            navigator.push(Route::TestCard { j_to_e: j_to_e() });
 
 
                         },
@@ -136,10 +130,11 @@ pub fn GnerateTestCard() -> Element {
 /// Define the actions the user can perform
 #[derive(Debug, Clone, Copy)]
 enum TestcardAction {
+    ShowQuestion,
     MarkFamiliar,
     MarkUnfamiliar,
     UserMark,
-    DisplayAnswer(usize),
+    UserPickAnswer(usize),
     Pronounce,
 }
 
@@ -160,12 +155,13 @@ pub fn TestCard(j_to_e: bool) -> Element {
     let mut show_answer = use_signal(|| false);
     let mut is_marked = use_signal(|| false);
     let mut selected_answer = use_signal(|| None as Option<usize>);
+    let mut correct_answer_index = use_signal(|| 0 as usize);
     
     // --- content for UI ---
     let mut question = use_signal(|| "".to_string());
     let mut reading = use_signal(|| "".to_string());
-    let mut currect_answer_index = use_signal(|| 0 as usize);
     let mut vector_of_answers = use_signal(|| vec!["".to_string(); 4]);
+    let mut score = use_signal(|| 0);
 
     // --- pool for db op ---
     let db_pool = use_context::<sqlx::SqlitePool>();
@@ -192,8 +188,8 @@ pub fn TestCard(j_to_e: bool) -> Element {
 
             // randomly select an the correct answer index from 0 to 3
             let idx = rng().random_range(0..=3);
-            currect_answer_index.set(idx);
-            eprintln!("the correct answer index is: {}", currect_answer_index());
+            correct_answer_index.set(idx);
+            eprintln!("the correct answer index is: {}", correct_answer_index());
 
             // pick the rest of the answers from the select_words
             // Exclude the current word index from the selection
@@ -213,9 +209,9 @@ pub fn TestCard(j_to_e: bool) -> Element {
                 question.set(word.expression.clone());
 
                 // Fill the correct answer at the random index
-                vector_of_answers.write()[currect_answer_index()] = word.meaning.clone();
+                vector_of_answers.write()[correct_answer_index()] = word.meaning.clone();
                 for i in 0..4 {
-                    if i != currect_answer_index() {
+                    if i != correct_answer_index() {
               
                         let idx = chosen_numbers.pop().unwrap();
                         let random_word = select_words.read()[idx].clone();
@@ -226,9 +222,9 @@ pub fn TestCard(j_to_e: bool) -> Element {
             } else {
                 question.set(word.meaning.clone());
 
-                vector_of_answers.write()[currect_answer_index()] = word.expression.clone();
+                vector_of_answers.write()[correct_answer_index()] = word.expression.clone();
                 for i in 0..4 {
-                    if i != currect_answer_index() {
+                    if i != correct_answer_index() {
               
                         let idx = chosen_numbers.pop().unwrap();
                         let random_word = select_words.read()[idx].clone();
@@ -244,11 +240,11 @@ pub fn TestCard(j_to_e: bool) -> Element {
     };
 
     // 2. --- Effect for Initial Load ---
-    // `use_effect` runs after the component renders.
-    // By calling our logic here, we load the very first card.
+    // This effect runs once when the component mounts to load the first card.
+    // and whenever the index changes.
     use_effect(move || {
         load_card(index());
-    }); // This effect runs only when `index()` changes
+    }); 
 
     // 3. --- Simplified Event Handler ---
     let mut go_to_next_card = move || {
@@ -260,11 +256,16 @@ pub fn TestCard(j_to_e: bool) -> Element {
                 message: "End of cards, looping back to the start.".to_string(),
                 level: StatusLevel::Info,
             });
+            // Show final score
+            status_message.set(StatusMessage {
+                message: format!("Test finished! Your score: {}/{}", score(), total_cards),
+                level: StatusLevel::Info,
+            });
             0 // Loop back to the start
         };
 
         index.set(next_index); // Update the index signal
-        load_card(next_index); // Load the new card using the reusable logic
+        // load_card(next_index); // remove this line to avoid reloading the card
     };
 
     // 4. --- Use coroutine to handle keyboard/mouse event ---
@@ -285,7 +286,19 @@ pub fn TestCard(j_to_e: bool) -> Element {
                     continue;
                 };
                 match action {
+                    TestcardAction::ShowQuestion => {
+                        eprintln!("Showing question for word {}", word_id);
+                        show_question.set(!show_question());
+                    }
                     TestcardAction::MarkUnfamiliar => {
+                        if !show_answer() {
+                            eprintln!("Cannot mark as 'Needs Practice' without showing the answer first");
+                            status_message.set(StatusMessage {
+                                message: "Please show the answer before marking as 'Needs Practice'.".to_string(),
+                                level: StatusLevel::Warning,
+                            });
+                            continue; // Skip if answer is not shown
+                        }
                         eprintln!("Marking word {} as 'Needs Practice'", word_id);
                         match ProgressUpdate::new()
                             .increment_practice_time()
@@ -299,7 +312,15 @@ pub fn TestCard(j_to_e: bool) -> Element {
                          go_to_next_card();
                     }
                     TestcardAction::MarkFamiliar => {
-                        eprintln!("Marking word {} as 'Got It!'", word_id);
+                        if !show_answer() {
+                            eprintln!("Cannot mark as 'Got It!' without showing the answer first");
+                            status_message.set(StatusMessage {
+                                message: "Please show the answer before marking as 'Got It!'.".to_string(),
+                                level: StatusLevel::Warning,
+                            });
+                            continue; // Skip if answer is not shown
+                        }
+                     
                         match ProgressUpdate::new()
                             .increment_practice_time()
                             .set_familiar(true)
@@ -323,7 +344,7 @@ pub fn TestCard(j_to_e: bool) -> Element {
                             Err(e) => eprintln!("Background update failed: {}", e),
                         }
                     }
-                    TestcardAction::DisplayAnswer(selected) => {
+                    TestcardAction::UserPickAnswer(selected) => {
                         if show_answer() {
                             eprintln!("Answer already displayed for word {}", word_id);
                             continue; // Skip if answer is already shown
@@ -331,6 +352,11 @@ pub fn TestCard(j_to_e: bool) -> Element {
                         eprintln!("Displaying answer for word {}", word_id);
                         selected_answer.set(Some(selected));
                         show_answer.set(true);
+
+                        // Check if the selected answer is correct
+                        if selected == correct_answer_index() {
+                            score.set(score() + 1);
+                        }
                     }   
                     TestcardAction::Pronounce => {
                         eprintln!("Pronouncing word {}", word_id);
@@ -383,7 +409,7 @@ pub fn TestCard(j_to_e: bool) -> Element {
     let get_card_class = |i: usize| {
         if let Some(selected) = selected_answer() {
             if show_answer() {
-                if i == currect_answer_index() {
+                if i == correct_answer_index() {
                     "card mb-2 bg-success text-light"
                 } else if i == selected {
                     "card mb-2 bg-danger text-light"
@@ -416,6 +442,10 @@ pub fn TestCard(j_to_e: bool) -> Element {
             onkeydown: move |event: KeyboardEvent| {
                 match event.key() {
                     // Check for 'n' or 'N'
+                    Key::Character(s) if s.eq_ignore_ascii_case("q") => {
+                        eprintln!("q key pressed, showing/hiding question");
+                        km_actions.send(TestcardAction::ShowQuestion);
+                    },
                     Key::Character(s) if s.eq_ignore_ascii_case("n") => {
                         eprintln!("n key pressed, marking as unfamiliar");
                         km_actions.send(TestcardAction::MarkUnfamiliar);
@@ -430,20 +460,20 @@ pub fn TestCard(j_to_e: bool) -> Element {
                         km_actions.send(TestcardAction::UserMark);
                     },
                     Key::Character(s) if s.eq_ignore_ascii_case("1") => {
-                        eprintln!("s key pressed, displaying answer");
-                        km_actions.send(TestcardAction::DisplayAnswer(0));
+                        eprintln!("1 key pressed, displaying answer");
+                        km_actions.send(TestcardAction::UserPickAnswer(0));
                     },
                     Key::Character(s) if s.eq_ignore_ascii_case("2") => {
-                        eprintln!("s key pressed, displaying answer");
-                        km_actions.send(TestcardAction::DisplayAnswer(1));
+                        eprintln!("2 key pressed, displaying answer");
+                        km_actions.send(TestcardAction::UserPickAnswer(1));
                     },
                     Key::Character(s) if s.eq_ignore_ascii_case("3") => {
-                        eprintln!("s key pressed, displaying answer");
-                        km_actions.send(TestcardAction::DisplayAnswer(2));
+                        eprintln!("3 key pressed, displaying answer");
+                        km_actions.send(TestcardAction::UserPickAnswer(2));
                     },
                     Key::Character(s) if s.eq_ignore_ascii_case("4") => {
-                        eprintln!("s key pressed, displaying answer");
-                        km_actions.send(TestcardAction::DisplayAnswer(3));
+                        eprintln!("4 key pressed, displaying answer");
+                        km_actions.send(TestcardAction::UserPickAnswer(3));
                     },
                     Key::Character(s) if s.eq_ignore_ascii_case("p") => {
                         eprintln!("p key pressed, pronouncing word");
@@ -489,9 +519,7 @@ pub fn TestCard(j_to_e: bool) -> Element {
 
                     button { 
                         class: button_class, 
-
-                        onclick: move |_| km_actions.send(TestcardAction::UserMark),
-                                                    
+                        onclick: move |_| km_actions.send(TestcardAction::UserMark),                                                    
                         {star_icon}
                     }
                 }
@@ -505,18 +533,17 @@ pub fn TestCard(j_to_e: bool) -> Element {
                         }
                     }
                 
-
+                // --- Answers Section ---
                 div { class: "col",
              
                         div { class: "d-flex flex-column gap-3",
-                            
-                            for i in 0..4 {
-                                
+
+                            for i in 0..4 {                                
                                 div {
                                     class: get_card_class(i),
                                     style: "cursor: pointer;",
                                     onclick: move |_| {
-                                        km_actions.send(TestcardAction::DisplayAnswer(i as usize));
+                                        km_actions.send(TestcardAction::UserPickAnswer(i as usize));
                                     },
                                     div {
                                         class: "card-body d-flex align-items-center",
@@ -529,7 +556,6 @@ pub fn TestCard(j_to_e: bool) -> Element {
                                     }
                                 }
                             }
-
 
                         }
                     

@@ -167,6 +167,7 @@ pub fn WordListPage(list_type: WordListType) -> Element {
                                     th { "Expression" }
                                     th { "Reading" }
                                     th { "Meaning" }
+                                    th { "Practice Time" }
                                 }
                             }
                             tbody {
@@ -175,6 +176,7 @@ pub fn WordListPage(list_type: WordListType) -> Element {
                                         td { "{word.expression}" }
                                         td { "{word.reading}" }
                                         td { "{word.meaning}" }
+                                        td { "{word.practice_time}" }
                                     }
                                 }
                             }
