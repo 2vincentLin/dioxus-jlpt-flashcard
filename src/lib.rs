@@ -2,12 +2,14 @@ pub mod db;
 pub mod flashcard;
 pub mod wordlist;
 pub mod footer;
+pub mod testcard;
 
 use tts::*;
 
 use dioxus::prelude::*;
 use flashcard::{GenerateCard, DisplayCard};
 use wordlist::{WordListPage, WordListType};
+use testcard::{GnerateTestCard, TestCard};
 use db::*;
 use sqlx::SqlitePool;
 
@@ -24,6 +26,10 @@ pub enum Route {
     DisplayCard { j_to_e: bool},
     #[route("/word-list/:list_type")]
     WordListPage { list_type: WordListType },
+    #[route("/testcard")]
+    GnerateTestCard {},
+    #[route("/testcard/:j_to_e")]
+    TestCard { j_to_e: bool },
     #[route("/setting")]
     Setting {},
 

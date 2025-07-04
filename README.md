@@ -12,7 +12,12 @@ This is a personal project built to practice Rust and the Dioxus framework by cr
     - 🗣️ Text-to-Speech: Hit the speaker button to hear the Japanese word pronounced by the system's native TTS engine.
     - ✅ Got It: Mark a word as "familiar" to reduce its appearance frequency.
     - 🔄 Need More Practice: Keep a word as "unfamiliar" to ensure it appears more often.
-
+- Generate Test Desk:
+    - You can now create tests from the words you have practiced or favorited.
+    - From the home page, click a summary to view your word list.
+    - From the word list page, click "Generate Test" to start a quiz.
+    - The test will randomly pick answers from your deck to help you review.
+ 
 # Getting Started
 
 since I don't expect anyone use it, but if you do, 

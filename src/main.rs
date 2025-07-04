@@ -92,6 +92,8 @@ fn App() -> Element {
         document::Link { rel: "stylesheet", href: BOOTSTRAP_CSS }
         document::Link { rel: "stylesheet", href: MAIN_CSS }
 
+    
+
         // Conditionally render based on the db_pool resource state
         match &*db_pool.read_unchecked() {
             Some(Ok(pool)) => {
@@ -114,11 +116,23 @@ fn App() -> Element {
                         // The Router is now only rendered when the pool is available
                         Router::<Route> {}
 
-                        // Footer with status message
-                        // div {
-                        //     class: "bg-dark text-white p-2 small mt-auto",
-                        //     "Status: All systems operational"
+                        // for i in 0..=4 {
+                        //     div {
+                        //         class: "card clickable mb-2 bg-dark text-light",
+                        //         style: "cursor: pointer;",
+                                
+                        //         div {
+                        //             class: "card-body d-flex align-items-center",
+                        //             span {
+                        //                 class: "badge bg-secondary me-3",
+                        //                 style: "width: 2rem;",
+                        //                 "{i}"
+                        //             }
+                        //             span { "1" }
+                        //         }
+                        //     }
                         // }
+                                        
                         Footer {}
                     }
 
@@ -152,7 +166,11 @@ fn App() -> Element {
                 }
             }
         }
+
+        
     }
+
+    
 }
 
 

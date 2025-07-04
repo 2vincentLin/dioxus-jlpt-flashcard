@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::error::Error;
 use crate::db::*;
 use crate::Route;
+use crate::footer::{StatusMessage, StatusLevel};
 
 /// Represents the type of word list to display.
 /// This enum is used to determine which set of words to fetch from the database.
@@ -65,8 +66,15 @@ impl FromStr for WordListType {
 pub fn WordListPage(list_type: WordListType) -> Element {
     
     let navigator = use_navigator();
-
+    let mut select_words = use_context::<Signal<Vec<WordRecord>>>();
+    // Add a state to control button enabled/disabled
+    let mut generate_enabled = use_signal(|| false);
     let db_pool = use_context::<sqlx::SqlitePool>();
+
+    let mut status_message = use_context::<Signal<StatusMessage>>();
+
+
+
     // Here we can use the word_list_type to determine what to display.
     let word_list = use_resource(move || {
         let pool = db_pool.clone();
@@ -108,39 +116,72 @@ pub fn WordListPage(list_type: WordListType) -> Element {
     // Determine the title based on the list_type
     let title = format!("{} words", list_type);
 
+    use_effect(move || {
+        // This effect runs when the word_list resource changes
+        status_message.set(StatusMessage {
+            message: format!("App is ready."),
+            level: StatusLevel::Success,
+        });
+        if let Some(Ok(words)) = &*word_list.read_unchecked() {
+            if words.len() > 0 {
+                eprintln!("Word list loaded to select_words signal");
+                select_words.set(words.clone()); // Store the words in the context
+                generate_enabled.set(true); // Enable the button when words are loaded
+            }
+
+        }
+    });
+    
+
     rsx! {
-        div { class: "container p-4",
-            div { class: "col-auto",
-                button { class: "btn btn-secondary", 
-                onclick: move |_| {
-                    navigator.push(Route::Home {  });
-                }, 
-                "Go Back" }
+        div { class: "container p-4 d-flex flex-column h-75",
+            div { class: "d-flex justify-content-between align-items-center mb-3",
+                button { class: "btn btn-secondary",
+                    onclick: move |_| {
+                        navigator.push(Route::Home {  });
+                    },
+                    "Go Back"
+                }
+                button { class: "btn btn-primary",
+                    disabled: !generate_enabled(), // Disable until ready
+                    onclick: move |_| {
+                        if generate_enabled() {
+                            navigator.push(Route::GnerateTestCard {});
+                        }
+                    },
+                "Generate Test"
+                }
             }
             h1 { "{title}" }
             
             // Render based on the state of our resource            
             match &*word_list.read_unchecked() {
-                Some(Ok(words)) => rsx! {
-                    table { class: "table table-dark table-striped",
-                        thead {
-                            tr {
-                                th { "Expression" }
-                                th { "Reading" }
-                                th { "Meaning" }
-                            }
-                        }
-                        tbody {
-                            for word in words {
+                Some(Ok(words)) =>{ 
+                    // select_words.set(words.clone()); // Store the words in the context
+                    rsx! {
+                    
+                    div { class: "flex-grow-1 overflow-auto",
+                        table { class: "table table-dark table-striped table-hover", // Added table-hover for better UX
+                            thead {
                                 tr {
-                                    td { "{word.expression}" }
-                                    td { "{word.reading}" }
-                                    td { "{word.meaning}" }
+                                    th { "Expression" }
+                                    th { "Reading" }
+                                    th { "Meaning" }
+                                }
+                            }
+                            tbody {
+                                for word in words {
+                                    tr {
+                                        td { "{word.expression}" }
+                                        td { "{word.reading}" }
+                                        td { "{word.meaning}" }
+                                    }
                                 }
                             }
                         }
                     }
-                },
+                }
+            },
                 Some(Err(e)) => rsx! {
                     div { class: "alert alert-danger", "Error loading words: {e}" }
                 },

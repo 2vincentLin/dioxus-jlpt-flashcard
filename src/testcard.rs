@@ -1,4 +1,4 @@
-
+use std::vec;
 
 use dioxus::prelude::*;
 use crate::db::*;
@@ -8,35 +8,44 @@ use tts::*;
 use crate::return_voice;
 
 use futures_util::StreamExt;
+use rand::seq::SliceRandom;
+use rand::{rng, Rng};
+// Use the IndexedRandom trait for random selection
+use rand::prelude::IndexedRandom;
 
 
-/// This is the main flashcard generation component
 #[component]
-pub fn GenerateCard() -> Element {
-
-    let mut number_of_cards = use_signal(|| 15);
-    let mut jlpt_lv = use_signal(|| JLPTlv::N5.to_string());
-    let mut j_to_e= use_signal(|| true);
-    let mut unfamiliar_only = use_signal(|| true);
-    let mut random_shuffle = use_signal(|| true);
-    let mut user_mark = use_signal(|| false);
-    
-    let navigator = use_navigator();
-
-    // This is the info message that will be displayed in the button row
+pub fn GnerateTestCard() -> Element {
+    // Get the status message and level from the context
     let mut status_message = use_context::<Signal<StatusMessage>>();
 
-    let db_pool = use_context::<sqlx::SqlitePool>();
-    let pool_ge = db_pool.clone();
+    let navigator = use_navigator();
+    let mut number_of_cards = use_signal(|| 15);
     let select_words = use_context::<Signal<Vec<WordRecord>>>();
 
 
+    let mut j_to_e= use_signal(|| true);
+
+
+    // let db_pool = use_context::<sqlx::SqlitePool>();
+    // let pool_ge = db_pool.clone();
+    let select_words = use_context::<Signal<Vec<WordRecord>>>();
 
 
     rsx!(
         div {
             class: "container mt-2 p-4 border rounded shadow-sm bg-dark", // Bootstrap container with some styling
-            // Top Row: Number of Cards and jlpt Level
+            // --- Top Controls ---
+            div { class: "row my-3",
+                div { class: "col-auto",
+                    button { class: "btn btn-secondary", 
+                    onclick: move |_| {
+                        navigator.push(Route::Home {});
+                    }, 
+                    "Go Back" }
+                }
+            }
+            // 2nd Row: Number of Cards and jToE Checkbox
             div { class: "row mb-3 g-3 align-items-end", // g-3 for gutters between columns
                 div { class: "col-md-6", // Takes half width on medium screens and up
                     label { class: "form-label", r#for: "numCardsSelect", "Number of Cards:" }
@@ -60,29 +69,7 @@ pub fn GenerateCard() -> Element {
                         }
                     }
                 
-                div { class: "col-md-6", // Takes half width on medium screens and up
-                    label { class: "form-label", r#for: "JLPTlvSelect", "jlpt Level:" }
-                    select {
-                        class: "form-select",
-                        id: "JLPTlvSelect",
-                        value: "{jlpt_lv}",
-                        oninput: move |evt| {
-                            // Update the level based on dropdown selection
-                            jlpt_lv.set(evt.value()); },
-                        option { value: JLPTlv::N1.to_string(), "n1" }
-                        option { value: JLPTlv::N2.to_string(), "n2" }
-                        option { value: JLPTlv::N3.to_string(), "n3" }
-                        option { value: JLPTlv::N4.to_string(), "n4" }
-                        option { value: JLPTlv::N5.to_string(), "n5" }
-                    }
-                }
-            }
-
-            // Second Row: Checkboxes
-            div { class: "row mb-3 g-3",
-                // Grouping checkboxes for better responsiveness if needed
                 div { class: "col-md-6",
-                     div { class: "mb-2", // Margin bottom for spacing between checkbox groups
                         div { class: "form-check",
                             input {
                                 class: "form-check-input",
@@ -93,45 +80,11 @@ pub fn GenerateCard() -> Element {
                             }
                             label { class: "form-check-label", r#for: "jToECheck", "J to E" }
                         }
-                        div { class: "form-check",
-                            input {
-                                class: "form-check-input",
-                                r#type: "checkbox",
-                                id: "unfamiliarCheck",
-                                checked: unfamiliar_only(),
-                                oninput: move |evt| unfamiliar_only.set(evt.checked()),
-                            }
-                            label { class: "form-check-label", r#for: "unfamiliarCheck", "Unfamiliar Only" }
-                        }
-                    }
-                }
-                div { class: "col-md-6",
-                    div { class: "mb-2",
-                        div { class: "form-check",
-                            input {
-                                class: "form-check-input",
-                                r#type: "checkbox",
-                                id: "shuffleCheck",
-                                checked: random_shuffle(),
-                                oninput: move |evt| random_shuffle.set(evt.checked()),
-                            }
-                            label { class: "form-check-label", r#for: "shuffleCheck", "Random Shuffle Card" }
-                        }
-                        div { class: "form-check",
-                            input {
-                                class: "form-check-input",
-                                r#type: "checkbox",
-                                id: "userMarkCheck",
-                                checked: user_mark(),
-                                oninput: move |evt| user_mark.set(evt.checked()),
-                            }
-                            label { class: "form-check-label", r#for: "userMarkCheck", "User Mark" }
-                        }
-                    }
                 }
             }
 
-            // Button Row 
+
+            // 3rd Row - Generate Button
             div { 
                 //    `justify-content-end` pushes everything to the right.
                 //    `align-items-center` vertically centers the message and button.
@@ -144,107 +97,82 @@ pub fn GenerateCard() -> Element {
                         class: "btn btn-primary btn-lg",
                         r#type: "button",
                         onclick: move |_| {
-                            // We need to clone the signal to move it into the async block
-                            let pool = pool_ge.clone();
+                            
                             let mut select_words = select_words.clone();
                             let navigator = navigator.clone();
 
-                            let jlpt_lv = jlpt_lv.clone();
                             let num = number_of_cards();
-                            let random = random_shuffle();
-                            let unfamiliar_val = !unfamiliar_only();
-                            let user_mark_val = user_mark();
 
-                            async move {
-                                eprintln!("Generate Cards Clicked! ..."); // Your logging
+                            let j_to_e = j_to_e();
 
-                                let jlpt = JLPTlv::from_string(&jlpt_lv()).unwrap();
-            
+                            let mut rng = rng();
+                            let mut words = select_words.read().clone();
+                            words.shuffle(&mut rng);
+                            let selected: Vec<WordRecord> = words.into_iter().take(num).collect();
+                            select_words.set(selected);
 
-                                match return_words_by_user_progress(&pool, jlpt, 0, unfamiliar_val, user_mark_val, num, random).await {
-                                    Ok(records) => {
-                                        if records.is_empty() {
-                                            // Set the message and DO NOT navigate
-                                            status_message.set(StatusMessage {
-                                                message: "No cards found for these settings.".to_string(),
-                                                level: StatusLevel::Warning,
-                                            });
-                                        } else {
-                                            // Load records and navigate
-                                            select_words.set(records);
-                                            status_message.set(StatusMessage {
-                                                message: format!("{} cards loaded successfully", select_words().len()),
-                                                level: StatusLevel::Success,
-                                            });
-                                            navigator.push(Route::DisplayCard { j_to_e: j_to_e() });
-                                        }
-                                    },
-                                    Err(e) => {
-                                        eprintln!("Error fetching word IDs: {}", e);
-                                        status_message.set(StatusMessage {
-                                            message: "A database error occurred.".to_string(),
-                                            level: StatusLevel::Error,
-                                        });
-                                        
-                                    }
-                                }
-                            }
+                            eprintln!("Selected {} words for test cards", select_words.len());
+                            eprintln!("the cards picked are: {:?}", select_words.read());
+
+                            status_message.set(StatusMessage {
+                                message: "Generating test cards successfully".to_string(),
+                                level: StatusLevel::Info,
+                            });
+                            navigator.push(Route::TestCard { j_to_e });
+
+
                         },
-                        "Generate Card"
+                        "Generate Test Cards"
                     }
                 }
             }
         }
     )
 
+
 }
+
 
 /// Define the actions the user can perform
 #[derive(Debug, Clone, Copy)]
-enum FlashcardAction {
+enum TestcardAction {
     MarkFamiliar,
     MarkUnfamiliar,
     UserMark,
-    DisplayAnswer,
+    DisplayAnswer(usize),
     Pronounce,
 }
 
 
-
-
-/// This component displays a flashcard with a question, reading, and answer.
+/// this component is the main test card interface
+/// It's most the same as flashcard, but with multiple choice answers
 #[component]
-pub fn DisplayCard(j_to_e: bool) -> Element {
+pub fn TestCard(j_to_e: bool) -> Element {
     let navigator = use_navigator();
     let mut index = use_signal(|| 0 as usize); // current index in select_words
     let select_words = use_context::<Signal<Vec<WordRecord>>>();
     let total_cards = select_words.len();
     let mut status_message = use_context::<Signal<StatusMessage>>();
     
-
-     // --- Signals for UI State ---
+    // --- Signals for UI State ---
     let mut show_question = use_signal(|| true);
     let mut show_reading = use_signal(|| true);
     let mut show_answer = use_signal(|| false);
     let mut is_marked = use_signal(|| false);
-
-
+    let mut selected_answer = use_signal(|| None as Option<usize>);
+    
     // --- content for UI ---
     let mut question = use_signal(|| "".to_string());
     let mut reading = use_signal(|| "".to_string());
-    let mut answer = use_signal(|| "".to_string());
+    let mut currect_answer_index = use_signal(|| 0 as usize);
+    let mut vector_of_answers = use_signal(|| vec!["".to_string(); 4]);
 
     // --- pool for db op ---
     let db_pool = use_context::<sqlx::SqlitePool>();
     let pool_action = db_pool.clone(); // pool for km_actions
-    // let pool_un = db_pool.clone(); // pool for unfamiliar op
-    // let pool_fa = db_pool.clone(); // pool for familiar op
-    // let pool_um = db_pool.clone(); // pool for user mark op
-
 
     // --- voice for tts ---
     let voice = return_voice("ja", Gender::Male)?;
-
 
     // --- setup button class and icon for user_mark
     let button_class = if is_marked() {
@@ -254,7 +182,6 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
         };
     let star_icon = if is_marked() { "★" } else { "☆" }; // Solid vs. Outline star
 
-
     // 1. --- Create a reusable closure to load a card ---
     // This closure takes the index of the card to load.
     let mut load_card = move |card_index: usize| {
@@ -262,13 +189,55 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
             eprintln!("Loading card at index {}: {:?}", card_index, word);
             reading.set(word.reading.clone());
             is_marked.set(word.user_mark);
+
+            // randomly select an the correct answer index from 0 to 3
+            let idx = rng().random_range(0..=3);
+            currect_answer_index.set(idx);
+            eprintln!("the correct answer index is: {}", currect_answer_index());
+
+            // pick the rest of the answers from the select_words
+            // Exclude the current word index from the selection
+            let mut possible_numbers: Vec<usize> = (0..=select_words.len() - 1).collect();
+            possible_numbers.retain(|&x| x != card_index); // Exclude the current word index
+            
+            // from the possible numbers, randomly select 3 indices
+            let mut rngen = rng();
+            let mut chosen_numbers: Vec<usize> = possible_numbers
+                .choose_multiple(&mut rngen, 3) // Choose 3 random indices
+                .cloned() // Clone the &usize references into usize values
+                .collect(); // Collect the values into a new Vec
+
+            eprintln!("Chosen numbers for other answers: {:?}", chosen_numbers);
+
             if j_to_e {
                 question.set(word.expression.clone());
-                answer.set(word.meaning.clone());
+
+                // Fill the correct answer at the random index
+                vector_of_answers.write()[currect_answer_index()] = word.meaning.clone();
+                for i in 0..4 {
+                    if i != currect_answer_index() {
+              
+                        let idx = chosen_numbers.pop().unwrap();
+                        let random_word = select_words.read()[idx].clone();
+                        vector_of_answers.write()[i] = random_word.meaning.clone();
+                    }
+                }
+                
             } else {
                 question.set(word.meaning.clone());
-                answer.set(word.expression.clone());
+
+                vector_of_answers.write()[currect_answer_index()] = word.expression.clone();
+                for i in 0..4 {
+                    if i != currect_answer_index() {
+              
+                        let idx = chosen_numbers.pop().unwrap();
+                        let random_word = select_words.read()[idx].clone();
+                        vector_of_answers.write()[i] = random_word.expression.clone();
+                    }
+                }
             }
+            eprintln!("vector_of_answers: {:?}", vector_of_answers());
+            // eprintln!("4th answer: {}", vector_of_answers()[3]);
             // Always hide the answer when loading a new card
             show_answer.set(false);
         }
@@ -278,9 +247,8 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
     // `use_effect` runs after the component renders.
     // By calling our logic here, we load the very first card.
     use_effect(move || {
-        load_card(0); // Load the card at index 0
-    });
-
+        load_card(index());
+    }); // This effect runs only when `index()` changes
 
     // 3. --- Simplified Event Handler ---
     let mut go_to_next_card = move || {
@@ -299,11 +267,10 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
         load_card(next_index); // Load the new card using the reusable logic
     };
 
-
     // 4. --- Use coroutine to handle keyboard/mouse event ---
     // The coroutine will handle all keyboard/mouse events.
     // We give it a name `km_actions` to send messages to it.
-    let km_actions = use_coroutine( move |mut rx: UnboundedReceiver<FlashcardAction>| {
+    let km_actions = use_coroutine( move |mut rx: UnboundedReceiver<TestcardAction>| {
         // Clone all the state the logic will need into the coroutine
         let pool = pool_action.clone();
 
@@ -313,14 +280,12 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
         async move {
             // This loop waits for messages to be sent to the coroutine
             while let Some(action) = rx.next().await {
-                let Some(word_id) = select_words.read().get(index.read().clone()).map(|w| w.id) else {
+                let Some(word_id) = select_words.get(index()).map(|w| w.id) else {
                     eprintln!("Could not get word at current index.");
                     continue;
                 };
-                let pool = pool.clone();
-
                 match action {
-                    FlashcardAction::MarkUnfamiliar => {
+                    TestcardAction::MarkUnfamiliar => {
                         eprintln!("Marking word {} as 'Needs Practice'", word_id);
                         match ProgressUpdate::new()
                             .increment_practice_time()
@@ -333,7 +298,7 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                         }
                          go_to_next_card();
                     }
-                    FlashcardAction::MarkFamiliar => {
+                    TestcardAction::MarkFamiliar => {
                         eprintln!("Marking word {} as 'Got It!'", word_id);
                         match ProgressUpdate::new()
                             .increment_practice_time()
@@ -346,7 +311,7 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                         }
                          go_to_next_card();
                     }
-                    FlashcardAction::UserMark => {
+                    TestcardAction::UserMark => {
                         eprintln!("User mark for word {}", word_id);
                         is_marked.set(!is_marked());
                         match ProgressUpdate::new()
@@ -358,11 +323,16 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                             Err(e) => eprintln!("Background update failed: {}", e),
                         }
                     }
-                    FlashcardAction::DisplayAnswer => {
+                    TestcardAction::DisplayAnswer(selected) => {
+                        if show_answer() {
+                            eprintln!("Answer already displayed for word {}", word_id);
+                            continue; // Skip if answer is already shown
+                        }
                         eprintln!("Displaying answer for word {}", word_id);
+                        selected_answer.set(Some(selected));
                         show_answer.set(true);
-                    }
-                    FlashcardAction::Pronounce => {
+                    }   
+                    TestcardAction::Pronounce => {
                         eprintln!("Pronouncing word {}", word_id);
 
                         let text_to_speak = reading(); // Clone the text to speak
@@ -402,15 +372,33 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                     }
                 }
 
-                
-               
+
             }
+        
         }
     });
 
 
-    rsx! {
-        
+    // 5. --- For each card, determine the class ---
+    let get_card_class = |i: usize| {
+        if let Some(selected) = selected_answer() {
+            if show_answer() {
+                if i == currect_answer_index() {
+                    "card mb-2 bg-success text-light"
+                } else if i == selected {
+                    "card mb-2 bg-danger text-light"
+                } else {
+                    "card clickable mb-2 bg-dark text-light"
+                }
+            } else {
+                "card clickable mb-2 bg-dark text-light"
+            }
+        } else {
+            "card clickable mb-2 bg-dark text-light"
+        }
+    };
+
+    rsx!(
 
         div { 
             class: "container h-75 d-flex flex-column",
@@ -430,24 +418,36 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                     // Check for 'n' or 'N'
                     Key::Character(s) if s.eq_ignore_ascii_case("n") => {
                         eprintln!("n key pressed, marking as unfamiliar");
-                        km_actions.send(FlashcardAction::MarkUnfamiliar);
+                        km_actions.send(TestcardAction::MarkUnfamiliar);
                     },
                     // Add a key for the second button, e.g., 'G' for "Got it!"
                     Key::Character(s) if s.eq_ignore_ascii_case("g") => {
                         eprintln!("g key pressed, marking as familiar");
-                        km_actions.send(FlashcardAction::MarkFamiliar);
+                        km_actions.send(TestcardAction::MarkFamiliar);
                     },
                     Key::Character(s) if s.eq_ignore_ascii_case("m") => {
                         eprintln!("m key pressed, toggling user mark");
-                        km_actions.send(FlashcardAction::UserMark);
+                        km_actions.send(TestcardAction::UserMark);
                     },
-                    Key::Character(s) if s.eq_ignore_ascii_case("s") => {
+                    Key::Character(s) if s.eq_ignore_ascii_case("1") => {
                         eprintln!("s key pressed, displaying answer");
-                        km_actions.send(FlashcardAction::DisplayAnswer);
+                        km_actions.send(TestcardAction::DisplayAnswer(0));
+                    },
+                    Key::Character(s) if s.eq_ignore_ascii_case("2") => {
+                        eprintln!("s key pressed, displaying answer");
+                        km_actions.send(TestcardAction::DisplayAnswer(1));
+                    },
+                    Key::Character(s) if s.eq_ignore_ascii_case("3") => {
+                        eprintln!("s key pressed, displaying answer");
+                        km_actions.send(TestcardAction::DisplayAnswer(2));
+                    },
+                    Key::Character(s) if s.eq_ignore_ascii_case("4") => {
+                        eprintln!("s key pressed, displaying answer");
+                        km_actions.send(TestcardAction::DisplayAnswer(3));
                     },
                     Key::Character(s) if s.eq_ignore_ascii_case("p") => {
                         eprintln!("p key pressed, pronouncing word");
-                        km_actions.send(FlashcardAction::Pronounce);
+                        km_actions.send(TestcardAction::Pronounce);
                     },
                     // Ignore any other key presses
                     _ => {}
@@ -459,7 +459,7 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                 div { class: "col-auto",
                     button { class: "btn btn-secondary", 
                     onclick: move |_| {
-                        navigator.push(Route::GenerateCard {});
+                        navigator.push(Route::GnerateTestCard {});
                     }, 
                     "Go Back" }
                 }
@@ -490,7 +490,7 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                     button { 
                         class: button_class, 
 
-                        onclick: move |_| km_actions.send(FlashcardAction::UserMark),
+                        onclick: move |_| km_actions.send(TestcardAction::UserMark),
                                                     
                         {star_icon}
                     }
@@ -500,19 +500,39 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                     div { class: "col d-flex justify-content-between align-items-center",
                         p { class: "lead my-3", "{reading()}" }
                         button { class: "btn btn-light",
-                            onclick: move |_| km_actions.send(FlashcardAction::Pronounce),
+                            onclick: move |_| km_actions.send(TestcardAction::Pronounce),
                             "🔊"}
                         }
                     }
                 
 
                 div { class: "col",
-                    onclick: move |_| km_actions.send(FlashcardAction::DisplayAnswer),
-                    if show_answer() {
-                        h3 { class: "display-5 text-success", "{answer()}" }
-                    } else {
-                        div { class: "alert alert-info", "Click to ", u {"s"} , "how answer" }
-                    }
+             
+                        div { class: "d-flex flex-column gap-3",
+                            
+                            for i in 0..4 {
+                                
+                                div {
+                                    class: get_card_class(i),
+                                    style: "cursor: pointer;",
+                                    onclick: move |_| {
+                                        km_actions.send(TestcardAction::DisplayAnswer(i as usize));
+                                    },
+                                    div {
+                                        class: "card-body d-flex align-items-center",
+                                        span {
+                                            class: "badge bg-secondary me-3",
+                                            style: "width: 2rem;",
+                                            u {"{i+1}"}
+                                        }
+                                        span { "{vector_of_answers()[i]}" }
+                                    }
+                                }
+                            }
+
+
+                        }
+                    
                 }
             }
 
@@ -542,15 +562,15 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                 
                 div { class: "col",
                     button { class: "btn btn-warning w-100", 
-                    onclick: move |_| km_actions.send(FlashcardAction::MarkUnfamiliar),
+                    onclick: move |_| km_actions.send(TestcardAction::MarkUnfamiliar),
                     u {"N"}, "eed more practice" }
                 }
                 div { class: "col",
                     button { class: "btn btn-success w-100", 
-                    onclick: move |_| km_actions.send(FlashcardAction::MarkFamiliar),                 
+                    onclick: move |_| km_actions.send(TestcardAction::MarkFamiliar),                 
                     u {"G"}, "ot it!" }
                 }
             }
         }
-    }
+    )
 }
