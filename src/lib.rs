@@ -3,6 +3,7 @@ pub mod flashcard;
 pub mod wordlist;
 pub mod footer;
 pub mod testcard;
+pub mod utils;
 
 use tts::*;
 

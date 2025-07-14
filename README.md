@@ -20,8 +20,6 @@ This is a personal project built to practice Rust and the Dioxus framework by cr
  
 # Getting Started
 
-since I don't expect anyone use it, but if you do, 
-
 1. install rust in your system, download the whole project, 
 2. run `cargo run --bin build_db` to build the jlpt word database, 
 3. then you can build the project.
@@ -32,6 +30,8 @@ This project is built with Rust and leverages the following core crates:
 - [Dioxus](https://docs.rs/dioxus/latest/dioxus/index.html): A portable, performant, and ergonomic framework for building user interfaces in Rust.
 - [SQLx](https://docs.rs/sqlx/latest/sqlx/index.html): A modern, async-ready, and type-safe SQL toolkit for Rust. Used for the local flashcard database.
 - [tts-rs](https://docs.rs/tts/latest/tts/): A cross-platform text-to-speech library that provides access to native system voices.
+- [lindera](https://github.com/lindera/lindera): A multilingual morphological analysis library. Used for analyze Japanese text for correct pronounciation.
+- [wana_kana](https://github.com/PSeitz/wana_kana_rust): A library for converting between Japanese characters. Used for convert Katakana to romaji.
 
 # Acknowledgments
 

@@ -2,7 +2,7 @@
 # will have compiled files and executables
 /target
 .DS_Store
-
+*.xlsx
 *.exe
 /dxgui.exe.WebView2
 
