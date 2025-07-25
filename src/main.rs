@@ -16,6 +16,9 @@ use dxgui::db::WordRecord;
 use dxgui::db::DB_URL;
 use dxgui::footer::{Footer, StatusLevel, StatusMessage};
 
+use ollama_rs::Ollama;
+use std::sync::Arc;
+
 
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
@@ -80,6 +83,9 @@ fn App() -> Element {
             .connect(DB_URL)
             .await
     });
+
+    // Provide the Ollama client to the context
+    provide_context(Arc::new(Ollama::default()));
 
     rsx! {
         head {

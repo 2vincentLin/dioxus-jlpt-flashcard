@@ -13,7 +13,7 @@ use rand::{rng, Rng};
 // Use the IndexedRandom trait for random selection
 use rand::prelude::IndexedRandom;
 
-
+/// This the componenet used to generate test for the selected words
 #[component]
 pub fn GnerateTestCard() -> Element {
     // Get the status message and level from the context

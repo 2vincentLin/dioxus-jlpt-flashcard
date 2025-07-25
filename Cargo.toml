@@ -13,6 +13,7 @@ dioxus = { version = "0.6.0", features = ["router"] }
 futures-util = "0.3.31"
 sqlx = { version = "0.8.6", features = [ "runtime-tokio", "sqlite", "macros" ] } # For SQLite database support
 tokio =  {version = "1.45.1", features = ["full"]} # For async runtime
+ollama-rs = "0.3.2" # For interacting with Ollama LLMs
 
 csv = "1.3.1" # For reading and writing CSV files
 serde = { version = "1.0.219", features = ["derive"] } # For deserializing CSV data into structs

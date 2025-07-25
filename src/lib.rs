@@ -4,6 +4,7 @@ pub mod wordlist;
 pub mod footer;
 pub mod testcard;
 pub mod utils;
+pub mod wordexplain_gemma;
 
 use tts::*;
 
@@ -11,6 +12,7 @@ use dioxus::prelude::*;
 use flashcard::{GenerateCard, DisplayCard};
 use wordlist::{WordListPage, WordListType};
 use testcard::{GnerateTestCard, TestCard};
+use wordexplain_gemma::WordExplainer;
 use db::*;
 use sqlx::SqlitePool;
 
@@ -31,6 +33,8 @@ pub enum Route {
     GnerateTestCard {},
     #[route("/testcard/:j_to_e")]
     TestCard { j_to_e: bool },
+    #[route("/wordexplain/:word_to_explain")]
+    WordExplainer {word_to_explain: String},
     #[route("/setting")]
     Setting {},
 
@@ -101,6 +105,14 @@ pub fn Navbar() -> Element { // Encapsulating navbar in its own component is goo
                                 to: Route::GenerateCard {},
                                 onclick: move |_| is_nav_open.set(false), // Close nav on link click
                                 "Flash Card"
+                            }
+                        }
+                        li { class: "nav-item",
+                            Link {
+                                class: "nav-link",
+                                to: Route::WordExplainer { word_to_explain: "食べちゃいました".to_string() } ,
+                                onclick: move |_| is_nav_open.set(false), // Close nav on link click
+                                "Word Explain"
                             }
                         }
                         li { class: "nav-item",
@@ -257,7 +269,7 @@ fn Home() -> Element {
     }
 }
 
-
+/// collection of any setting that user might need
 #[component]
 fn Setting() -> Element {
     // --- pool for db op ---

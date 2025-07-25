@@ -75,3 +75,17 @@ html, body {
 
 
 
+/* Target the buttons inside our interactive sentence container */
+.japanese-sentence-interactive .btn-link:hover {
+    /* A subtle background color for dark theme */
+    background-color: #343a40; 
+    
+    /* Ensure the link color stays bright on hover */
+    color: #0dcaf0; 
+
+    /* Add rounded corners for a modern look */
+    border-radius: 5px;
+
+    /* Remove the default underline from links to avoid clutter */
+    text-decoration: none;
+}

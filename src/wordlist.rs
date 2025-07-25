@@ -173,7 +173,17 @@ pub fn WordListPage(list_type: WordListType) -> Element {
                             tbody {
                                 for word in words {
                                     tr {
-                                        td { "{word.expression}" }
+                                        td {
+                                            // Add Bootstrap and custom classes for clickable style
+                                            class: "text-primary fw-bold text-decoration-none cursor-pointer word-link",
+                                            // Optionally, add a title for accessibility
+                                            title: "Click to explain",
+                                            Link {
+                                                to: Route::WordExplainer { word_to_explain: word.expression.clone() },
+                                                class: "text-reset text-decoration-none",
+                                                "{word.expression}"
+                                            }
+                                        }
                                         td { "{word.reading}" }
                                         td { "{word.meaning}" }
                                         td { "{word.practice_time}" }
