@@ -6,6 +6,7 @@ use crate::footer::{StatusMessage, StatusLevel};
 use crate::Route;
 use tts::*;
 use crate::return_voice;
+use crate::utils::speak_text;
 
 use futures_util::StreamExt;
 
@@ -368,37 +369,8 @@ pub fn DisplayCard(j_to_e: bool) -> Element {
                         let text_to_speak = reading(); // Clone the text to speak
                         let voice_to_use = voice_to_use.clone(); // Clone the voice configuration
                         
-                        // --- SPAWN THE THREAD ---
-                        // This moves the entire block of work to a background thread.
-                        std::thread::spawn(move || {
-                            // This code now runs in the background.
-                            match Tts::default() {
-                                Ok(mut tts) => {
-                                    // It's good practice to log from the thread to see it's working
-                                    eprintln!("[Thread] TTS initialized, setting voice...");
-                                    eprintln!("[Thread] Using voice: {:?}", voice_to_use);
-                                    eprintln!("[Thread] Text to speak: {}", text_to_speak);
-
-                                    if tts.set_voice(&voice_to_use).is_err() {
-                                        eprintln!("[Thread] Error: Failed to set voice.");
-                                    }
-
-                                    // Start the non-blocking speech
-                                    let _ = tts.speak(text_to_speak, false);
-
-                                    // *** THE KEY ***
-                                    // Sleep on the BACKGROUND thread. This keeps the `tts` object
-                                    // alive so it can finish speaking, but it does NOT block the UI.
-                                    // Adjust the duration if your text is longer.
-                                    std::thread::sleep(std::time::Duration::from_secs(5));
-
-                                    eprintln!("[Thread] Sleep finished, thread is ending.");
-                                },
-                                Err(e) => {
-                                    eprintln!("[Thread] Error: {}", e);
-                                }
-                            }
-                        });
+     
+                        speak_text(text_to_speak, voice_to_use, 5, Some(1.1), Some(1.0));
                     }
                 }
 

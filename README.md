@@ -1,6 +1,6 @@
 # Dioxus JLPT Flashcards
 
-This is a personal project built to practice Rust and the Dioxus framework by creating a desktop flashcard application for studying Japanese Language Proficiency Test (JLPT) vocabulary. Original goal is just to have flashcard to memorize the words, but now expand to use local AI to explain the the word and generate example sentences. 
+This is a personal project built to practice Rust and the Dioxus framework by creating a desktop flashcard application for studying Japanese Language Proficiency Test (JLPT) vocabulary. Original goal is just to have flashcard to memorize the words, but now expand to use local AI to explain the word and generate example sentences. 
 
 # Features
 
@@ -26,7 +26,7 @@ Each flashcard is more than just a word; it's an interactive tool.
 Turn your practice into progress by creating tests on demand.
 
 - Create tests from the words you have practiced or favorited.    
-- From the word list page, click **"Generate Test"** to start a quiz.    
+- From the home page, pick any summary, click **"Generate Test"** on the top right to start a quiz.    
 - The test will randomly pick answers from your deck to challenge you and reinforce your memory.
     
 
@@ -39,13 +39,20 @@ Go beyond simple definitions with a fully interactive, AI-powered explainer.
 	- why Gemma 3 4B? because it's surprisingly capable and fast, if using GPU, it only take less than 7gb VRAM. Which should be enough for most discrete GPU.
 - Each example sentence is automatically processed by **Lindera** to provide an accurate Romaji reading and break the sentence down into its component words.    
 - The magic doesn't stop there. **Every word in the new sentences is also clickable**, allowing you to dive deeper and deeper into the vocabulary in a continuous, interactive learning loop without ever leaving the page.
+
+A story generator for practiced/unfamiliar words
+
+- From the home page, pick any summary, on top right, click "**Generate Story**".
+- The app will jump to story generator page, and it'll randomly pick at most 10 words from your list to generate a story.
+- note that sometimes the LLM will fail to generate a JSON, you just have to try again.
+
 # Getting Started
 
 1. install rust in your system, download the whole project, 
 2. run `cargo run --bin build_db` to build the jlpt word database, 
 3. then you can build the project.
 4. download and install Ollama, this is very easy in any system.
-5. run `ollama run gemma3:4b` before open the app
+5. run `ollama run gemma3:4b` before open the app, you only need to do this once.
 
 # Tech Stack
 This project is built with Rust and leverages the following core crates:

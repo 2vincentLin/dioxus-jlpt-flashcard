@@ -89,3 +89,65 @@ html, body {
     /* Remove the default underline from links to avoid clutter */
     text-decoration: none;
 }
+
+
+/* The container for our word and its tooltip */
+.tooltip-container {
+    position: relative; /* This is crucial for positioning the tooltip */
+    display: inline-block; /* Allows elements to sit side-by-side */
+    cursor: pointer;
+}
+
+/* The hidden tooltip text - updated for a more compact style */
+.tooltip-text {
+    visibility: hidden; /* Hidden by default */
+    opacity: 0;
+    transition: opacity 0.3s;
+
+    /* --- Style Adjustments --- */
+    width: max-content;       /* ✨ Let width be determined by the content, up to a max */
+    max-width: 160px;         /* Prevent it from getting excessively wide */
+    font-size: 0.85rem;       /* ✨ Smaller font size */
+    padding: 1px 1px;         /* ✨ Reduced vertical padding */
+    background-color: #2c3034;/* Slightly lighter dark color */
+    color: #fff;
+    text-align: left;         /* Left-align text for better readability */
+    border-radius: 5px;
+    white-space: pre-wrap;
+
+    /* --- Positioning Adjustments --- */
+    position: absolute;
+    z-index: 0;
+    bottom: 100%;             
+    left: 0%;
+    margin-left: 0;           /* ✨ Remove the old fixed margin */
+    transform: translateX(-50%); /* ✨ New centering method for dynamic width */
+}
+/* The magic: Show the tooltip when hovering over the container */
+.tooltip-container:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
+
+.story-container {
+    line-height: 3.5; /* Increase line spacing to make room for romaji */
+    font-size: 1.5rem;
+}
+
+.word-unit {
+    display: inline-flex; /* Allows word and romaji to be grouped */
+    flex-direction: column; /* Stacks romaji below the word */
+    align-items: center;  /* Centers the romaji under the word */
+    margin: 0 4px;      /* A little space between words */
+    vertical-align: top;  /* Aligns units nicely if they have different heights */
+}
+
+.main-word {
+    /* Your existing styling for the Japanese word */
+}
+
+.romaji-reading {
+    font-size: 0.8rem;   /* Smaller font size for romaji */
+    color: #888;          /* Muted color */
+    margin-top: -1.8em; /* Pulls the romaji up closer to the main word */
+}

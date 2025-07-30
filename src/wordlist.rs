@@ -73,6 +73,8 @@ pub fn WordListPage(list_type: WordListType) -> Element {
 
     let mut status_message = use_context::<Signal<StatusMessage>>();
 
+    let mut words_to_use = use_context::<Signal<Vec<String>>>();
+
 
 
     // Here we can use the word_list_type to determine what to display.
@@ -136,20 +138,33 @@ pub fn WordListPage(list_type: WordListType) -> Element {
     rsx! {
         div { class: "container p-4 d-flex flex-column h-75",
             div { class: "d-flex justify-content-between align-items-center mb-3",
-                button { class: "btn btn-secondary",
-                    onclick: move |_| {
-                        navigator.push(Route::Home {  });
-                    },
-                    "Go Back"
+                // Left side: Go Back button
+                div {
+                    button { class: "btn btn-secondary",
+                        onclick: move |_| {
+                            navigator.push(Route::Home {  });
+                        },
+                        "Go Back"
+                    }
                 }
-                button { class: "btn btn-primary",
-                    disabled: !generate_enabled(), // Disable until ready
-                    onclick: move |_| {
-                        if generate_enabled() {
-                            navigator.push(Route::GnerateTestCard {});
-                        }
-                    },
-                "Generate Test"
+                // Right side: Generate Story and Generate Test buttons
+                div {
+                    class: "d-flex gap-2", // gap-2 adds spacing between the two right buttons
+                    button { class: "btn btn-primary",
+                        onclick: move |_| {
+                            navigator.push(Route::StoryGenerator {  });
+                        },
+                        "Generate Story"
+                    }
+                    button { class: "btn btn-primary",
+                        disabled: !generate_enabled(), // Disable until ready
+                        onclick: move |_| {
+                            if generate_enabled() {
+                                navigator.push(Route::GnerateTestCard {});
+                            }
+                        },
+                        "Generate Test"
+                    }
                 }
             }
             h1 { "{title}" }
@@ -158,6 +173,7 @@ pub fn WordListPage(list_type: WordListType) -> Element {
             match &*word_list.read_unchecked() {
                 Some(Ok(words)) =>{ 
                     // select_words.set(words.clone()); // Store the words in the context
+                    words_to_use.set(words.iter().map(|w| w.expression.clone()).collect()); // Store the words to use in the story generation
                     rsx! {
                     
                     div { class: "flex-grow-1 overflow-auto",

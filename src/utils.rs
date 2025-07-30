@@ -7,6 +7,71 @@ use lindera::tokenizer::Tokenizer;
 use wana_kana::ConvertJapanese;
 
 use serde::Deserialize;
+use std::fmt;
+use tts::*;
+
+/// a enum to hold the part of speed.
+#[derive(Debug, PartialEq, Clone)]
+pub enum PartOfSpeech {
+    Noun,
+    Verb,
+    Adjective,
+    Adverb,
+    Particle,
+    Conjunction,
+    AuxiliaryVerb,
+    Punctuation,
+    Unknown(String), // A variant to handle anything we don't recognize
+}
+
+// Implement a conversion FROM the Japanese string that Lindera gives you.
+// This allows you to easily create a PartOfSpeech from Lindera's output.
+impl From<&str> for PartOfSpeech {
+    fn from(s: &str) -> Self {
+        match s {
+            "名詞" => PartOfSpeech::Noun,
+            "動詞" => PartOfSpeech::Verb,
+            "形容詞" => PartOfSpeech::Adjective,
+            "副詞" => PartOfSpeech::Adverb,
+            "助詞" => PartOfSpeech::Particle,
+            "接続詞" => PartOfSpeech::Conjunction,
+            "助動詞" => PartOfSpeech::AuxiliaryVerb,
+            "記号" => PartOfSpeech::Punctuation,
+            // If we don't recognize the string, store it in the Unknown variant
+            unknown_pos => PartOfSpeech::Unknown(unknown_pos.to_string()),
+        }
+    }
+}
+
+// 3. Implement a way to display it back in Japanese for the UI.
+impl fmt::Display for PartOfSpeech {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let japanese_str = match self {
+            PartOfSpeech::Noun => "名詞",
+            PartOfSpeech::Verb => "動詞",
+            PartOfSpeech::Adjective => "形容詞",
+            PartOfSpeech::Adverb => "副詞",
+            PartOfSpeech::Particle => "助詞",
+            PartOfSpeech::Conjunction => "接続詞",
+            PartOfSpeech::AuxiliaryVerb => "助動詞",
+            PartOfSpeech::Punctuation => "記号",
+            PartOfSpeech::Unknown(s) => s,
+        };
+        write!(f, "{}", japanese_str)
+    }
+}
+
+
+/// Returns a CSS class based on the part of speech.
+pub fn get_pos_color_class(pos: &PartOfSpeech) -> &'static str {
+    match pos {
+        PartOfSpeech::Verb => "text-primary",
+        PartOfSpeech::Noun => "text-light",
+        PartOfSpeech::Particle => "text-warning",
+        PartOfSpeech::Adjective => "text-success",
+        _ => "text-secondary", // Default for all other types
+    }
+}
 
 /// after llm output, use extract_json_from_llm_output to extract the json and put it to this struct
 #[derive(Deserialize, Debug)]
@@ -37,6 +102,7 @@ pub fn romaji_pronounciation(text: &String) -> Result<String, Box<dyn std::error
         // This `if let` will always succeed after the call above.
         if let Some(details) = &token.details {
             // Check if the pronunciation field exists (IPADIC has 9+ fields)
+            eprintln!("surface form: {}", token.text);
             eprintln!("Token details: {:?}", details);
             if details.len() > 8 {
                 let pronunciation_katakana = &details[8];
@@ -145,8 +211,34 @@ pub fn extract_json_from_llm_output(text: &str) -> Option<String> {
     None
 }
 
-
-
+/// A function to speak text using TTS in a separate thread
+pub fn speak_text(
+    text: String,
+    voice: Voice,
+    duration: u64,
+    volume: Option<f32>,
+    rate: Option<f32>,
+) {
+    std::thread::spawn(move || {
+        match Tts::default() {
+            Ok(mut tts) => {
+                let _ = tts.set_voice(&voice);
+                if let Some(vol) = volume {
+                    let _ = tts.set_volume(vol);
+                }
+                if let Some(r) = rate {
+                    let _ = tts.set_rate(r);
+                }
+                let _ = tts.speak(text, false);
+                // Wait for speech to finish (adjust as needed)
+                std::thread::sleep(std::time::Duration::from_secs(duration));
+            }
+            Err(e) => {
+                eprintln!("[TTS Thread] Error: {}", e);
+            }
+        }
+    });
+}
 
 #[cfg(test)]
 mod tests {
@@ -158,6 +250,14 @@ mod tests {
         let result = romaji_pronounciation(&"私は学生です。".to_string()).unwrap();
         let expected = "watashi wa gakusei desu .".to_string();
         assert_eq!(result, expected);
+
+    }
+
+    #[test]
+    fn test_romaji_pronounciation1() {
+
+        let result = romaji_pronounciation(&"毎日、私は図書館で赤いりんごを食べます。図書館は赤いです。時々、僕は図書館の中で歩くのが好きです。特別な日は、赤いりんごが図書館の中にあり".to_string()).unwrap();
+
 
     }
 

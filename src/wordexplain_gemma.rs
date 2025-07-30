@@ -5,11 +5,10 @@ use std::error::Error;
 use std::sync::Arc;
 
 use dioxus::prelude::*;
-use crate::utils::{word_process};
+use crate::utils::{word_process, speak_text};
 use crate::return_voice;
 use crate::footer::{StatusMessage, StatusLevel};
 use tts::*;
-
 
 
 
@@ -28,7 +27,7 @@ struct Example {
     translation: String,
 }
 
-// A new struct to hold all the data for one processed sentence
+// A struct to hold all the data for one processed sentence
 #[derive(Clone, PartialEq)]
 struct ProcessedSentence {
     original: String,
@@ -57,12 +56,14 @@ async fn get_word_explanation(
     
     
     let prompt = format!(
-        r#"Explain the Japanese word '{}'. Provide the explanation and 3 example sentences in Japanese. The 'translation' for each example should be in English. Structure the output as a JSON object with the following keys: {{ 
-            "explain": "...", 
-            "example1": {{"sentence": "...", "translation": "..."}},
-            "example2": {{"sentence": "...", "translation": "..."}},
-            "example3": {{"sentence": "...", "translation": "..."}}
-        }}"#,
+        r#"Explain the Japanese word '{}'. Provide the explanation and 3 example sentences in Japanese. 
+            The 'translation' for each example should be in English not romaji. Structure the output as a JSON object with the following keys: 
+            {{ 
+                "explain": "...", 
+                "example1": {{"sentence": "...", "translation": "..."}},
+                "example2": {{"sentence": "...", "translation": "..."}},
+                "example3": {{"sentence": "...", "translation": "..."}}
+            }}"#,
         word_to_explain
     );
 
@@ -113,36 +114,41 @@ pub fn WordExplainer(word_to_explain: String) -> Element {
                     level: StatusLevel::Info,
                 });
                 // Call the async function to get the explanation
-                if let Ok(explanation) = get_word_explanation(client.clone(), &word).await {
-                    
-                    status_message.set(StatusMessage {
-                        message: format!("Explanation for '{}' retrieved successfully.", word),
-                        level: StatusLevel::Success,
-                    });
-                    
-                    // Update the main explanation text
-                    explanation_text.set(explanation.explain.clone());
-                    
-                    // Process all three example sentences and update our vector
-                    let mut sentences = Vec::new();
-                    let examples = vec![explanation.example1, explanation.example2, explanation.example3];
-                    for ex in examples {
-                        if let Ok((words, romaji)) = word_process(&ex.sentence) {
-                            sentences.push(ProcessedSentence {
-                                original: ex.sentence,
-                                translation: ex.translation,
-                                romaji,
-                                words,
-                            });
+                match get_word_explanation(client.clone(), &word).await {
+                    Ok(explanation) => {
+                        // Update the explanation text
+                        explanation_text.set(explanation.explain.clone());
+                        
+                        // Process all three example sentences and update our vector
+                        let mut sentences = Vec::new();
+                        let examples = vec![explanation.example1, explanation.example2, explanation.example3];
+                        for ex in examples {
+                            if let Ok((words, romaji)) = word_process(&ex.sentence) {
+                                sentences.push(ProcessedSentence {
+                                    original: ex.sentence,
+                                    translation: ex.translation,
+                                    romaji,
+                                    words,
+                                });
+                            }
                         }
+                        processed_sentences.set(sentences);
+
+                        status_message.set(StatusMessage {
+                            message: format!("Explanation for '{}' retrieved successfully.", word),
+                            level: StatusLevel::Success,
+                        });
+                    },
+
+                    Err(e) => {
+                        eprintln!("Error retrieving explanation for '{}': {}", word, e);
+                        status_message.set(StatusMessage {
+                            message: format!("Error retrieving explanation for '{}': {}", word, e),
+                            level: StatusLevel::Error,
+                        });
                     }
-                    processed_sentences.set(sentences);
-                } else {
-                    status_message.set(StatusMessage {
-                        message: format!("Failed to retrieve explanation for '{}'.", word),
-                        level: StatusLevel::Error,
-                    });
                 }
+             
             }
         
         }});
@@ -236,26 +242,14 @@ fn InteractiveSentence(
                             eprintln!("Pronouncing word {}", sentence_data.original.clone());
                             let text_to_speak = sentence_data.original.clone();
                             let voice_to_use = voice_to_use.clone();
-                            std::thread::spawn(move || {
-                                match Tts::default() {
-                                    Ok(mut tts) => {
-                                        if tts.set_voice(&voice_to_use).is_err() {
-                                            eprintln!("[Thread] Error: Failed to set voice.");
-                                        }
-                                        let _ = tts.speak(text_to_speak, false);
-                                        std::thread::sleep(std::time::Duration::from_secs(10));
-                                    },
-                                    Err(e) => {
-                                        eprintln!("[Thread] Error: {}", e);
-                                    }
-                                }
-                            });
+                            // Call the speak_text function to pronounce the word
+                            speak_text(text_to_speak, voice_to_use, 10, Some(1.1), Some(0.9));
                         },
                         "🔊"
                     }
                 }
             }
-            // ... (your interactive word buttons below, if needed)
+           
         }
     }
 }

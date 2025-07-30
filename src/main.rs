@@ -34,7 +34,7 @@ fn main() {
     // initiate Window builder
     let window_builder = WindowBuilder::new()
         .with_title("My language partner")
-        .with_inner_size(LogicalSize::new(600.0, 800.0)); // Set initial width and height
+        .with_inner_size(LogicalSize::new(1200.0, 1200.0)); // Set initial width and height
 
 
     // Create the Config with the custom window builder
@@ -64,6 +64,10 @@ fn App() -> Element {
     });
     // Provide the status signal to the context so it can be consumed by Footer
     provide_context(status_signal.clone());
+
+    // This will be used to hold the words to use in the story generation
+    let words_to_use = use_signal(|| Vec::<String>::new());
+    provide_context(words_to_use.clone());
 
     // Include the Bootstrap and global stylesheets
     let bootstrap = include_str!("../assets/bootstrap.min.css");

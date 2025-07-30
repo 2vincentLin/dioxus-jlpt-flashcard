@@ -5,6 +5,7 @@ pub mod footer;
 pub mod testcard;
 pub mod utils;
 pub mod wordexplain_gemma;
+pub mod story;
 
 use tts::*;
 
@@ -13,6 +14,7 @@ use flashcard::{GenerateCard, DisplayCard};
 use wordlist::{WordListPage, WordListType};
 use testcard::{GnerateTestCard, TestCard};
 use wordexplain_gemma::WordExplainer;
+use story::{InteractiveStory, StoryGenerator};
 use db::*;
 use sqlx::SqlitePool;
 
@@ -35,6 +37,10 @@ pub enum Route {
     TestCard { j_to_e: bool },
     #[route("/wordexplain/:word_to_explain")]
     WordExplainer {word_to_explain: String},
+    #[route("/story/:story_text/:english_translation")]
+    InteractiveStory { story_text: String, english_translation: String },
+    #[route("/storyGen")]
+    StoryGenerator {},
     #[route("/setting")]
     Setting {},
 
@@ -113,6 +119,23 @@ pub fn Navbar() -> Element { // Encapsulating navbar in its own component is goo
                                 to: Route::WordExplainer { word_to_explain: "食べちゃいました".to_string() } ,
                                 onclick: move |_| is_nav_open.set(false), // Close nav on link click
                                 "Word Explain"
+                            }
+                        }
+                        li { class: "nav-item",
+                            Link {
+                                class: "nav-link",
+                                to: Route::InteractiveStory { 
+                                    story_text: r#"今日は、友達と静かな公園を歩きました。猫が日向ぼっこをしていて、とても可愛かったです。
+                                        私は本を読みながら、ゆっくりと時間を過ごしました。友達は、店のウィンドウを見て、何か買うものを探していました。
+                                        彼女は速いペースで、様々な物を眺めていました。私は、彼女の興奮が嬉しいです。公園で一緒に過ごす時間は、本当に楽しい時間でした。帰る途中、彼女
+                                        は青い帽子を買いました。もうすぐ春ですね。とても幸せな一日でした。"#.to_string(), 
+                                    english_translation: r#"Today, I walked in a quiet park with my friend. A cat was basking in the sun, 
+                                        and it was very cute. I spent time leisurely while reading a book. My friend was
+                                        looking for something to buy, examining various items at a fast pace. I am happy with her excitement. 
+                                        The time spent together in the park was really a wonderful time. On the way home, 
+                                        she bought a blue hat. It's almost spring. It was a very happy day."#.to_string() },
+                                onclick: move |_| is_nav_open.set(false), // Close nav on link click
+                                "Story"
                             }
                         }
                         li { class: "nav-item",
